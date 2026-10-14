@@ -118,6 +118,8 @@ header.top { display: grid; gap: 10px; }
 .ic.ok { background: color-mix(in srgb, var(--up) 16%, transparent); color: var(--up); }
 .ic.no { background: color-mix(in srgb, var(--down) 14%, transparent); color: var(--down); }
 .ic.wa { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.ic.off { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); }
+.ic.alert { background: var(--down); color: var(--surface); }
 .checks .t { font-weight: 500; }
 .checks .s { font-size: 12px; color: var(--muted); }
 .checks .val { font-family: var(--font-num); font-size: 13px; text-align: right; white-space: nowrap; }
@@ -216,7 +218,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
       <div class="note" id="entry-note"></div>
     </section>
     <section class="card" aria-labelledby="h-exit">
-      <div class="card-head"><h2 id="h-exit">5️⃣ 出場訊號</h2><span class="tag">任一出現就要準備出場</span></div>
+      <div class="card-head"><h2 id="h-exit">5️⃣ 出場訊號</h2><span class="tag">– 未觸發　! 已觸發，要準備出場</span></div>
       <ul class="checks" id="exit-checks"></ul>
       <div class="subhead">兩條線現況</div>
       <div class="tbl"><table id="lines-table"></table></div>
@@ -365,7 +367,13 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
   function cls(v) { return v == null ? '' : v >= 0 ? 'pos' : 'neg'; }
   function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
   function num(id) { var v = parseFloat($(id).value); return isFinite(v) ? v : null; }
-  function icon(state) { return state === 'ok' ? '<span class="ic ok">✓</span>' : state === 'wa' ? '<span class="ic wa">!</span>' : '<span class="ic no">✕</span>'; }
+  function icon(state) {
+    if (state === 'ok') return '<span class="ic ok">✓</span>';
+    if (state === 'wa') return '<span class="ic wa">!</span>';
+    if (state === 'off') return '<span class="ic off">–</span>';
+    if (state === 'alert') return '<span class="ic alert">!</span>';
+    return '<span class="ic no">✕</span>';
+  }
 
   /* ---------- 載入資料 ---------- */
   function fromPreview() {
@@ -497,16 +505,17 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
       : '還沒全部符合前，依原則不開多單。';
 
     // 出場訊號
-    var dv = r.divNow, divState = dv.active ? 'no' : (dv.newHigh ? 'wa' : 'ok');
+    // 出場訊號：灰色 – = 未觸發（安全），黃色 ! = 留意，紅色 ! = 已觸發
+    var dv = r.divNow;
     var divDetail = dv.prevT
-      ? '本波高點 ' + fUsd(dv.candH) + '（' + fDate(dv.candT) + '），前高 ' + fUsd(dv.prevH) + '（' + fDate(dv.prevT) + '）'
+      ? '本波高點 ' + fUsd(dv.candH) + '（' + fDate(dv.candT) + '），前高 ' + fUsd(dv.prevH) + '（' + fDate(dv.prevT) + '）' +
+        (dv.active ? '：價格創新高但 MACD 沒跟上' : dv.newHigh ? '：價格創新高，MACD 也跟著創高' : '：價格沒有超過前高，不構成背離')
       : '找不到可比較的前一個波段高點';
-    var divVal = dv.active ? '已出現' : dv.newHigh ? 'MACD 仍跟上' : '未創新高';
     $('exit-checks').innerHTML =
-      '<li>' + icon(dv.active ? 'no' : 'ok') + '<div><div class="t">週MACD 頂背離（敏感指標）</div><div class="s">' + divDetail + '</div></div><div class="val">' + divVal + '</div></li>' +
-      '<li>' + icon(x.belowBoth ? 'no' : !x.aboveBoth ? 'wa' : 'ok') + '<div><div class="t">跌破週MA50 + 日MA360（延後指標）</div><div class="s">' +
+      '<li>' + icon(dv.active ? 'alert' : dv.newHigh ? 'wa' : 'off') + '<div><div class="t">週MACD 頂背離（敏感指標）</div><div class="s">' + divDetail + '</div></div><div class="val">' + (dv.active ? '已觸發' : dv.newHigh ? '留意中' : '未觸發') + '</div></li>' +
+      '<li>' + icon(x.belowBoth ? 'alert' : !x.aboveBoth ? 'wa' : 'off') + '<div><div class="t">跌破週MA50 + 日MA360（延後指標）</div><div class="s">' +
       (x.belowBoth ? '兩條線都已跌破' : !x.aboveBoth ? '已跌破' + (x.aboveD ? '週MA50' : '日MA360') + '，另一條還在' : '價格仍在兩條線之上') +
-      '</div></div><div class="val">' + (x.belowBoth ? '已觸發' : !x.aboveBoth ? '一半' : '未觸發') + '</div></li>';
+      '</div></div><div class="val">' + (x.belowBoth ? '已觸發' : !x.aboveBoth ? '觸發一半' : '未觸發') + '</div></li>';
 
     $('lines-table').innerHTML =
       '<thead><tr><th></th><th class="r">數值</th><th class="r">價格距離</th><th class="r">斜率</th></tr></thead><tbody>' +
