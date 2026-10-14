@@ -1,681 +1,813 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
+<!doctype html>
+<html lang="zh-Hant">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BTC 雙均線合約風控與傻瓜現貨視覺化戰情室</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>BTC 雙線監控</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <style>
-  :root {
-    --bg-main: #0b0f19;
-    --bg-card: #151c2c;
-    --bg-input: #1e293b;
-    --border: #2a364f;
-    --text-main: #f1f5f9;
-    --text-muted: #94a3b8;
-    --green: #10b981;
-    --green-bg: rgba(16, 185, 129, 0.15);
-    --red: #f43f5e;
-    --red-bg: rgba(244, 63, 94, 0.15);
-    --amber: #f59e0b;
-    --amber-bg: rgba(245, 158, 11, 0.15);
-    --cyan: #06b6d4;
-    --purple: #a855f7;
+/* 版面：手機單欄、桌機雙欄的監控面板；結論在上、細節在下 */
+:root {
+  --bg: #eef0f3;
+  --surface: #ffffff;
+  --sunk: #f6f7f9;
+  --ink: #15181d;
+  --muted: #5b6370;
+  --line: #dadee5;
+  --accent: #b5650a;      /* 日MA360 */
+  --wline: #2c64c9;       /* 週MA50 */
+  --up: #10835a;
+  --down: #c3352c;
+  --warn: #a86b00;
+  --grid: #eceef2;
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1115; --surface: #161a20; --sunk: #1c2128; --ink: #e7eaef; --muted: #9aa3b1;
+    --line: #2a313b; --accent: #f0a23b; --wline: #6ea2ff; --up: #3ec488; --down: #f2675f;
+    --warn: #e9b44c; --grid: #1f252d; color-scheme: dark;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background-color: var(--bg-main);
-    color: var(--text-main);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    padding: 20px;
-    line-height: 1.5;
-  }
-  .container { max-width: 1400px; margin: 0 auto; }
-  header {
-    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
-    border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 20px; gap: 12px;
-  }
-  h1 { font-size: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-  .subtitle { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
-  .btn {
-    background: #2563eb; color: #fff; border: none; padding: 10px 18px;
-    border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s;
-  }
-  .btn:hover { background: #1d4ed8; }
-  .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px; }
-  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; margin-bottom: 20px; }
-  .card {
-    background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: 12px; padding: 18px;
-  }
-  .card-title {
-    font-size: 1rem; font-weight: 700; margin-bottom: 14px;
-    padding-bottom: 8px; border-bottom: 1px solid var(--border);
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  .metric-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-  .metric-val { font-size: 1.75rem; font-weight: 800; margin: 6px 0; }
-  .badge {
-    display: inline-block; padding: 3px 10px; border-radius: 6px;
-    font-size: 0.78rem; font-weight: 700;
-  }
-  .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid rgba(16,185,129,0.4); }
-  .badge-red { background: var(--red-bg); color: var(--red); border: 1px solid rgba(244,63,94,0.4); }
-  .badge-amber { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(245,158,11,0.4); }
-  .banner {
-    padding: 12px 16px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; margin-bottom: 14px;
-  }
-  .check-list { list-style: none; }
-  .check-list li {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 9px 0; border-bottom: 1px dashed rgba(255,255,255,0.07); font-size: 0.9rem;
-  }
-  .check-list li:last-child { border-bottom: none; }
-  .fib-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
-  .fib-box {
-    background: var(--bg-input); border: 1px solid var(--border);
-    padding: 8px 10px; border-radius: 6px; font-size: 0.8rem;
-  }
-  .fib-box .val { font-size: 1rem; font-weight: 700; color: #fff; margin-top: 2px; }
-  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
-  label { display: block; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; }
-  input[type="number"] {
-    width: 100%; background: var(--bg-input); border: 1px solid var(--border);
-    color: #fff; padding: 9px 12px; border-radius: 6px; font-size: 0.95rem; font-weight: 600;
-  }
-  canvas {
-    width: 100%; background: #090d16; border: 1px solid var(--border);
-    border-radius: 8px; display: block; cursor: crosshair;
-  }
-  .legend {
-    display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.82rem; margin-bottom: 10px; color: var(--text-muted);
-  }
-  .legend span { display: flex; align-items: center; gap: 6px; }
-  .dot { width: 12px; height: 4px; border-radius: 2px; display: inline-block; }
-  #tooltip {
-    position: fixed; pointer-events: none; background: rgba(15, 23, 42, 0.95);
-    border: 1px solid #475569; padding: 10px 14px; border-radius: 8px;
-    font-size: 0.8rem; color: #f8fafc; display: none; z-index: 999;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.6);
-  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1115; --surface: #161a20; --sunk: #1c2128; --ink: #e7eaef; --muted: #9aa3b1;
+  --line: #2a313b; --accent: #f0a23b; --wline: #6ea2ff; --up: #3ec488; --down: #f2675f;
+  --warn: #e9b44c; --grid: #1f252d; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 40px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 16px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+.eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--wline); outline-offset: 2px; }
+
+/* 頁首 */
+header.top { display: grid; gap: 10px; }
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand h1 { font-size: 18px; font-weight: 700; }
+.brand .lines { font-size: 12px; color: var(--muted); }
+.lines i { font-style: normal; display: inline-block; width: 10px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+.price-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.price { font-family: var(--font-num); font-size: clamp(30px, 8vw, 44px); font-weight: 600; letter-spacing: -.01em; }
+.chg { font-family: var(--font-num); font-size: 15px; font-weight: 500; }
+.meta { display: flex; gap: 8px 14px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.btn {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 6px 12px; font-size: 13px;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.banner {
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+  border-radius: var(--r); padding: 10px 14px; font-size: 13px;
+}
+.banner.err { border-color: color-mix(in srgb, var(--down) 45%, transparent); background: color-mix(in srgb, var(--down) 9%, var(--surface)); }
+
+/* 四個結論 */
+.verdicts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (min-width: 820px) { .verdicts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.verdict {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 12px 14px; display: grid; gap: 4px; align-content: start; position: relative; overflow: hidden;
+}
+.verdict::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--muted); }
+.verdict.good::before { background: var(--up); }
+.verdict.bad::before { background: var(--down); }
+.verdict.warn::before { background: var(--warn); }
+.verdict .k { font-size: 12px; color: var(--muted); }
+.verdict .v { font-size: 17px; font-weight: 700; }
+.verdict.good .v { color: var(--up); }
+.verdict.bad .v { color: var(--down); }
+.verdict.warn .v { color: var(--warn); }
+.verdict .d { font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+/* 一般卡片 */
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 860px) { .grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 12px; min-width: 0; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.tag { font-size: 12px; color: var(--muted); }
+
+/* 條件清單 */
+.checks { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.checks li {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: start;
+  padding: 8px 0; border-top: 1px solid var(--line);
+}
+.checks li:first-child { border-top: 0; }
+.ic { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; margin-top: 1px; }
+.ic.ok { background: color-mix(in srgb, var(--up) 16%, transparent); color: var(--up); }
+.ic.no { background: color-mix(in srgb, var(--down) 14%, transparent); color: var(--down); }
+.ic.wa { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.checks .t { font-weight: 500; }
+.checks .s { font-size: 12px; color: var(--muted); }
+.checks .val { font-family: var(--font-num); font-size: 13px; text-align: right; white-space: nowrap; }
+
+/* 數值表 */
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 500; color: var(--muted); font-size: 12px; border-top: 0; }
+td.r, th.r { text-align: right; }
+td.num, .num td { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.tbl { overflow-x: auto; }
+.pos { color: var(--up); }
+.neg { color: var(--down); }
+tr.hl td { background: color-mix(in srgb, var(--wline) 9%, transparent); }
+.pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 99px; white-space: nowrap; }
+.pill.good { color: var(--up); background: color-mix(in srgb, var(--up) 14%, transparent); }
+.pill.bad { color: var(--down); background: color-mix(in srgb, var(--down) 13%, transparent); }
+.pill.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); }
+
+/* 圖表 */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 5px 12px; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.toggles { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+.toggles label { display: inline-flex; gap: 6px; align-items: center; }
+.chart { height: 340px; width: 100%; }
+.chart.macd { height: 150px; }
+@media (min-width: 860px) { .chart { height: 420px; } }
+.legend { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sw { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+.mk { font-size: 11px; }
+
+/* 表單 */
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-size: 12px; color: var(--muted); }
+.field input, .field select {
+  width: 100%; border: 1px solid var(--line); background: var(--sunk); border-radius: 8px; padding: 7px 10px;
+  font-family: var(--font-num);
+}
+.field.full { grid-column: 1 / -1; }
+.out { display: grid; gap: 8px; background: var(--sunk); border-radius: 8px; padding: 12px; }
+.out .row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+.out .row b { font-family: var(--font-num); font-weight: 600; }
+.note { font-size: 12px; color: var(--muted); }
+.verdict-line { font-weight: 600; font-size: 14px; }
+.verdict-line.good { color: var(--up); }
+.verdict-line.bad { color: var(--down); }
+.verdict-line.warn { color: var(--warn); }
+.subhead { font-size: 13px; font-weight: 700; margin-top: 4px; }
+
+details.card > summary { cursor: pointer; font-weight: 700; font-size: 15px; list-style: none; display: flex; justify-content: space-between; }
+details.card > summary::after { content: "展開"; font-size: 12px; font-weight: 400; color: var(--muted); }
+details.card[open] > summary::after { content: "收合"; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rules { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; }
+footer { font-size: 12px; color: var(--muted); text-align: center; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .verdict, .card { transition: border-color .2s; }
+}
 </style>
 </head>
 <body>
-<div class="container">
-  <header>
-    <div>
-      <h1>🛡️ BTC 傻瓜現貨 & 五大原則合約視覺化戰情室</h1>
-      <div class="subtitle" id="status-line">正在連線至 Binance 公開 API 載入過去 1000 日 K 線與 300 週 K 線...</div>
+
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>BTC 雙線監控</h1>
+      <span class="lines"><i style="background:var(--accent)"></i>日MA360　<i style="background:var(--wline)"></i>週MA50</span>
     </div>
-    <button class="btn" onclick="fetchAndRender()">🔄 立即刷新即時盤面</button>
+    <div class="price-row">
+      <span class="price" id="price">—</span>
+      <span class="chg" id="chg"></span>
+    </div>
+    <div class="meta">
+      <span id="src">資料載入中…</span>
+      <button class="btn" id="btn-refresh" type="button">重新整理</button>
+    </div>
+    <div class="banner" id="banner" hidden></div>
   </header>
 
-  <!-- 頂部 4 大指標卡 -->
-  <div class="grid-4">
-    <div class="card">
-      <div class="metric-label">BTC 即時現價 (USDT)</div>
-      <div class="metric-val" id="v-price">--</div>
-      <div id="v-price-sub" style="font-size:0.8rem; color:var(--text-muted)">--</div>
-    </div>
-    <div class="card">
-      <div class="metric-label" style="color:var(--amber)">日線 MA360 (牛熊分界線)</div>
-      <div class="metric-val" id="v-dma360" style="color:var(--amber)">--</div>
-      <div id="v-dslope">--</div>
-    </div>
-    <div class="card">
-      <div class="metric-label" style="color:var(--cyan)">週線 MA50 (大級別生命線)</div>
-      <div class="metric-val" id="v-wma50" style="color:var(--cyan)">--</div>
-      <div id="v-wslope">--</div>
-    </div>
-    <div class="card">
-      <div class="metric-label">與上方保護線乖離率</div>
-      <div class="metric-val" id="v-dist">--</div>
-      <div style="font-size:0.78rem; color:var(--text-muted)">理想回踩開多區：<b>0% ~ +4.5%</b></div>
-    </div>
+  <section class="verdicts" id="verdicts" aria-label="目前結論">
+    <div class="verdict"><span class="k">現貨傻瓜法</span><span class="v">—</span></div>
+    <div class="verdict"><span class="k">合約開多</span><span class="v">—</span></div>
+    <div class="verdict"><span class="k">出場警報</span><span class="v">—</span></div>
+    <div class="verdict"><span class="k">浮盈加倉</span><span class="v">—</span></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card" aria-labelledby="h-entry">
+      <div class="card-head"><h2 id="h-entry">4️⃣ 開多條件</h2><span class="tag" id="entry-count"></span></div>
+      <ul class="checks" id="entry-checks"></ul>
+      <div class="note" id="entry-note"></div>
+    </section>
+    <section class="card" aria-labelledby="h-exit">
+      <div class="card-head"><h2 id="h-exit">5️⃣ 出場訊號</h2><span class="tag">任一出現就要準備出場</span></div>
+      <ul class="checks" id="exit-checks"></ul>
+      <div class="subhead">兩條線現況</div>
+      <div class="tbl"><table id="lines-table"></table></div>
+    </section>
   </div>
 
-  <!-- 雙欄：五大原則檢核 + 逃頂與斐波那契 -->
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-title">
-        <span>📋 現貨傻瓜法 & 合約開倉五大原則</span>
-        <span style="font-size:0.75rem; color:var(--text-muted)">自動燈號判定</span>
+  <section class="card" aria-labelledby="h-chart">
+    <div class="card-head">
+      <h2 id="h-chart">走勢圖</h2>
+      <div class="seg" role="group" aria-label="切換週期">
+        <button type="button" id="tab-d" aria-pressed="true">日線</button>
+        <button type="button" id="tab-w" aria-pressed="false">週線 + MACD</button>
       </div>
-      <div id="spot-banner" class="banner">--</div>
-      <ul class="check-list">
-        <li>
-          <span>1️⃣ 價格突破日線 MA360 + 突破週線 MA50</span>
-          <span id="c-break">--</span>
-        </li>
-        <li>
-          <span>2️⃣ 突破後站穩一陣子 (連 14 日收盤於雙線之上)</span>
-          <span id="c-stood">--</span>
-        </li>
-        <li>
-          <span>3️⃣ 兩條均線皆確定上揚 (保護線成型/加倉許可)</span>
-          <span id="c-slope">--</span>
-        </li>
-        <li>
-          <span>4️⃣ 價格回撤靠近週 MA50 或日 MA360 (0~4.5%)</span>
-          <span id="c-pullback">--</span>
-        </li>
-        <li>
-          <span style="color:#fda4af; font-weight:600">🎯 原則 3 建議止損位 (上揚雙均線下方再遠 5%)</span>
-          <span id="c-sl" style="font-weight:800; color:var(--red); font-size:1.05rem">--</span>
-        </li>
-      </ul>
     </div>
+    <div class="toggles">
+      <label><input type="checkbox" id="tg-fib" checked> 斐波那契</label>
+      <label><input type="checkbox" id="tg-risk" checked> 止損 / 強平線</label>
+      <label><input type="checkbox" id="tg-mark" checked> 訊號標記</label>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="chart" id="chart-main"></div>
+    <div class="chart macd" id="chart-macd" hidden></div>
+    <div class="note">手指兩指縮放、左右拖曳可看更早的歷史。</div>
+  </section>
 
-    <div class="card">
-      <div class="card-title">
-        <span>🚨 原則 5 出場逃頂 & 莊家換位思考 (Fibonacci)</span>
-        <span style="font-size:0.75rem; color:var(--text-muted)">防獵殺監控</span>
+  <div class="grid2">
+    <section class="card" aria-labelledby="h-liq">
+      <div class="card-head"><h2 id="h-liq">強平價檢查器</h2><span class="tag">原則 5️⃣：強平價要在兩線之下</span></div>
+      <form class="form" id="liq-form" autocomplete="off">
+        <div class="field"><label for="lc-entry">開倉均價（USD）</label><input id="lc-entry" type="number" inputmode="decimal" step="any"></div>
+        <div class="field"><label for="lc-lev">槓桿（倍）</label><input id="lc-lev" type="number" inputmode="decimal" step="any" value="3"></div>
+        <div class="field"><label for="lc-mmr">維持保證金率 %</label><input id="lc-mmr" type="number" inputmode="decimal" step="any"></div>
+        <div class="field"><label for="lc-manual">交易所顯示的強平價（選填）</label><input id="lc-manual" type="number" inputmode="decimal" step="any" placeholder="填了就用這個"></div>
+        <div class="field full subhead">加倉模擬（選填）</div>
+        <div class="field"><label for="lc-qty">目前倉位（BTC）</label><input id="lc-qty" type="number" inputmode="decimal" step="any" placeholder="例如 0.5"></div>
+        <div class="field"><label for="lc-addqty">打算加倉（BTC）</label><input id="lc-addqty" type="number" inputmode="decimal" step="any" placeholder="例如 0.2"></div>
+        <div class="field full"><label for="lc-addprice">加倉價格（USD）</label><input id="lc-addprice" type="number" inputmode="decimal" step="any" placeholder="空白 = 用現價"></div>
+      </form>
+      <div class="out" id="liq-out"></div>
+      <div class="note">估算公式以「逐倉多單」計算，未含手續費與資金費。全倉模式的強平價會受帳戶餘額影響，請直接填交易所顯示的數字。</div>
+    </section>
+
+    <section class="card" aria-labelledby="h-fib">
+      <div class="card-head">
+        <h2 id="h-fib">斐波那契</h2>
+        <div class="field" style="min-width:0">
+          <label for="fib-span" class="sr">範圍</label>
+          <select id="fib-span">
+            <option value="52">最近 1 年</option>
+            <option value="104">最近 2 年</option>
+            <option value="156" selected>最近 3 年</option>
+            <option value="208">最近 4 年</option>
+          </select>
+        </div>
       </div>
-      <ul class="check-list" style="margin-bottom:10px">
-        <li>
-          <span>敏感指標：週線 MACD 頂背離 (波段新高但MACD未創高)</span>
-          <span id="c-div">--</span>
-        </li>
-        <li style="font-size:0.78rem; color:var(--text-muted); padding:4px 0" id="c-div-detail">--</li>
-        <li>
-          <span>延後指標：價格實質跌破週 MA50 與日 MA360</span>
-          <span id="c-exit">--</span>
-        </li>
-      </ul>
-      <div style="font-size:0.8rem; color:var(--text-muted); font-weight:600">📐 近 180 日斐波那契回撤 (莊家常洗盤獵殺位置)</div>
-      <div class="fib-grid" id="fib-container"></div>
-    </div>
+      <div class="note" id="fib-note"></div>
+      <div class="tbl"><table id="fib-table"></table></div>
+    </section>
   </div>
 
-  <!-- 倉位與強平風控模擬器 -->
-  <div class="card" style="margin-bottom:20px">
-    <div class="card-title">
-      <span>⚖️ 合約倉位控管 & 強平價視覺化檢核器 (會在下方 K 線圖直接畫出你的強平紅線)</span>
-    </div>
-    <div class="form-grid">
-      <div>
-        <label>你的開倉均價 (USDT)</label>
-        <input type="number" id="in-entry" value="72000" step="500" oninput="updateRiskAndChart()">
-      </div>
-      <div>
-        <label>實質槓桿倍數 (Leverage)</label>
-        <input type="number" id="in-lev" value="2.5" step="0.5" min="1" max="100" oninput="updateRiskAndChart()">
-      </div>
-      <div>
-        <label>模擬浮盈加倉價格 (0 = 不加倉)</label>
-        <input type="number" id="in-addp" value="0" step="500" oninput="updateRiskAndChart()">
-      </div>
-      <div>
-        <label>加倉倍數 (相對於原倉位大小)</label>
-        <input type="number" id="in-addr" value="0" step="0.5" min="0" max="10" oninput="updateRiskAndChart()">
-      </div>
-    </div>
-    <div id="risk-box" class="banner" style="margin-bottom:0">--</div>
+  <div class="grid2">
+    <section class="card" aria-labelledby="h-chips">
+      <div class="card-head"><h2 id="h-chips">籌碼參考</h2><span class="tag">Binance 合約公開數據</span></div>
+      <div id="chips"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-sim">
+      <div class="card-head"><h2 id="h-sim">復盤：現在像過去哪個位置</h2></div>
+      <div class="note">比對「價格距兩線的距離」與「兩線的斜率」，找出歷史上最相似的時刻，看看之後怎麼走。</div>
+      <div class="tbl"><table id="sim-table"></table></div>
+    </section>
   </div>
 
-  <!-- 互動式 K 線與均線 / 週線 MACD 圖表 -->
-  <div class="card">
-    <div class="card-title">
-      <span>📊 BTC 日 K 線 + 日 MA360 + 週 MA50 + 強平防線 + 週線 MACD 背離圖 (近 360 日)</span>
-      <span style="font-size:0.78rem; color:var(--text-muted)">滑鼠移至圖表可查看每日精確數值</span>
-    </div>
-    <div class="legend">
-      <span><i class="dot" style="background:#10b981; height:10px"></i> 日 K 線 (漲/跌)</span>
-      <span><i class="dot" style="background:#f59e0b"></i> 日線 MA360</span>
-      <span><i class="dot" style="background:#06b6d4"></i> 週線 MA50</span>
-      <span><i class="dot" style="background:#f43f5e; border-bottom:2px dashed #f43f5e"></i> 你的預估強平價</span>
-      <span><i class="dot" style="background:#eab308"></i> 週線 MACD DIF</span>
-      <span><i class="dot" style="background:#a855f7"></i> 週線 MACD DEA</span>
-    </div>
-    <canvas id="kchart" width="1320" height="580"></canvas>
+  <div class="grid2">
+    <section class="card" aria-labelledby="h-ev">
+      <div class="card-head"><h2 id="h-ev">站上 / 跌破兩線紀錄</h2><span class="tag">連續 3 天才算</span></div>
+      <div class="tbl"><table id="ev-table"></table></div>
+    </section>
+    <section class="card" aria-labelledby="h-div">
+      <div class="card-head"><h2 id="h-div">週MACD 頂背離紀錄</h2></div>
+      <div class="note">價格創波段新高，但週線 MACD（DIF）沒有跟著創高。</div>
+      <div class="tbl"><table id="div-table"></table></div>
+    </section>
   </div>
+
+  <details class="card" id="settings">
+    <summary>參數設定</summary>
+    <div class="note">這些數字是把你的原則「量化」的方式，可以依自己的判斷調整。只存在這台裝置的瀏覽器裡；Telegram 機器人用的是預設值。</div>
+    <form class="form" id="param-form" autocomplete="off">
+      <div class="field"><label for="p-daysAboveMin">「站上一陣子」至少幾天</label><input id="p-daysAboveMin" type="number" min="1" step="1"></div>
+      <div class="field"><label for="p-nearPct">「回撤到線附近」幾 % 以內</label><input id="p-nearPct" type="number" min="0.5" step="0.5"></div>
+      <div class="field"><label for="p-dSlopeDays">日MA360 上揚：比幾天前高</label><input id="p-dSlopeDays" type="number" min="1" step="1"></div>
+      <div class="field"><label for="p-wSlopeWeeks">週MA50 上揚：比幾週前高</label><input id="p-wSlopeWeeks" type="number" min="1" step="1"></div>
+      <div class="field"><label for="p-stopBufferPct">止損：低於較低那條線幾 %</label><input id="p-stopBufferPct" type="number" min="0" step="0.5"></div>
+      <div class="field"><label for="p-mmrPct">維持保證金率 %</label><input id="p-mmrPct" type="number" min="0" step="0.1"></div>
+    </form>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn primary" type="button" id="p-apply">套用</button>
+      <button class="btn" type="button" id="p-reset">恢復預設</button>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary>我的操作原則</summary>
+    <ol class="rules">
+      <li><b>級別：</b>週線為主，搭配日線。</li>
+      <li><b>現貨傻瓜法：</b>突破日MA360、週MA50 買進；跌破兩條線賣出。</li>
+      <li><b>倉位：</b>低位開倉。兩線都上揚、有保護線之前，浮盈絕不加倉。開得不夠低就找合適點全出，等符合開倉條件再進。</li>
+      <li><b>止損：</b>設在上揚的週MA50、日MA360 下方再遠一段。</li>
+      <li><b>強平價：</b>價格穿越兩線後，強平價一定要在兩條線之下。</li>
+      <li><b>入場：</b>突破兩線一陣子、兩線都上揚、價格回撤到線附近。</li>
+      <li><b>出場：</b>週MACD 頂背離（敏感）；確實跌破兩線（延後）。</li>
+      <li><b>換位思考：</b>如果我是莊家，要怎麼讓所有人踏空、怎麼殺光所有人？</li>
+    </ol>
+  </details>
+
+  <footer>僅供個人紀錄與學習參考，不構成投資建議。合約交易有爆倉風險。</footer>
 </div>
 
-<div id="tooltip"></div>
-
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="btc-logic.js"></script>
 <script>
-let STATE = null;
+(function () {
+  'use strict';
+  var L = window.BTCLogic, DAY = 86400000;
+  var $ = function (id) { return document.getElementById(id); };
+  var PARAM_KEYS = ['daysAboveMin', 'nearPct', 'dSlopeDays', 'wSlopeWeeks', 'stopBufferPct', 'mmrPct'];
 
-function calcSMA(arr, period) {
-  let out = new Array(arr.length).fill(null);
-  let sum = 0;
-  for (let i = 0; i < arr.length; i++) {
-    sum += arr[i];
-    if (i >= period) sum -= arr[i - period];
-    if (i >= period - 1) out[i] = sum / period;
+  var S = {
+    daily: null, source: '', mode: '', updated: null,
+    res: null, chips: null, params: loadParams(),
+    tab: 'd', fibSpan: 156, charts: [], liq: null
+  };
+
+  /* ---------- 小工具 ---------- */
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function loadParams() {
+    var p = {};
+    try { p = JSON.parse(store('btc-params') || '{}') || {}; } catch (e) { p = {}; }
+    return p;
   }
-  return out;
-}
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function fDate(t) { var d = new Date(t); return d.getUTCFullYear() + '/' + pad(d.getUTCMonth() + 1) + '/' + pad(d.getUTCDate()); }
+  function fUsd(v) { return v == null || !isFinite(v) ? '—' : '$' + Math.round(v).toLocaleString('en-US'); }
+  function fPct(v, d) { if (v == null || !isFinite(v)) return '—'; d = d == null ? 1 : d; return (v > 0 ? '+' : '') + v.toFixed(d) + '%'; }
+  function cls(v) { return v == null ? '' : v >= 0 ? 'pos' : 'neg'; }
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function num(id) { var v = parseFloat($(id).value); return isFinite(v) ? v : null; }
+  function icon(state) { return state === 'ok' ? '<span class="ic ok">✓</span>' : state === 'wa' ? '<span class="ic wa">!</span>' : '<span class="ic no">✕</span>'; }
 
-function calcEMA(arr, span) {
-  let out = new Array(arr.length).fill(null);
-  let k = 2 / (span + 1);
-  let prev = arr[0];
-  out[0] = prev;
-  for (let i = 1; i < arr.length; i++) {
-    prev = arr[i] * k + prev * (1 - k);
-    out[i] = prev;
+  /* ---------- 載入資料 ---------- */
+  function fromPreview() {
+    var rows = window.BTC_PREVIEW.rows, out = [], prev = null;
+    rows.forEach(function (r) {
+      var c = r[1], o = prev == null ? c : prev;
+      out.push({ t: r[0] * DAY, o: o, h: Math.max(o, c), l: Math.min(o, c), c: c });
+      prev = c;
+    });
+    return out;
   }
-  return out;
-}
 
-async function fetchKlines(interval, limit) {
-  const endpoints = [
-    `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${limit}`,
-    `https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${limit}`
-  ];
-  for (const url of endpoints) {
-    try {
-      const r = await fetch(url);
-      if (r.ok) return await r.json();
-    } catch (e) {}
+  function load() {
+    $('src').textContent = '資料載入中…';
+    if (window.BTC_PREVIEW) {
+      S.daily = fromPreview(); S.mode = 'preview'; S.source = window.BTC_PREVIEW.source;
+      showBanner('這是預覽版：使用到 ' + fDate(S.daily[S.daily.length - 1].t) + ' 的真實歷史收盤價，讓你先看看畫面與訊號。正式版放在你的 GitHub 上，會即時抓 Binance 最新價格。', false);
+      ready();
+      return;
+    }
+    L.fetchDaily().then(function (r) {
+      S.daily = r.daily; S.source = r.source; S.mode = 'live'; S.updated = new Date();
+      ready();
+      loadChips();
+    }).catch(function () {
+      fetch('data/snapshot.json', { cache: 'no-store' }).then(function (r) {
+        if (!r.ok) throw new Error();
+        return r.json();
+      }).then(function (s) {
+        S.daily = s.rows.map(function (x) { return { t: x[0], o: x[1], h: x[2], l: x[3], c: x[4] }; });
+        S.source = s.source; S.mode = 'snapshot'; S.updated = new Date(s.updated);
+        showBanner('即時資料暫時抓不到，先顯示機器人最近一次存下的資料（' + new Date(s.updated).toLocaleString('zh-TW') + '）。', false);
+        ready();
+      }).catch(function () {
+        $('src').textContent = '';
+        showBanner('抓不到幣價資料。請確認網路連線後按「重新整理」；如果持續失敗，可能是所在地區連不上 Binance 與 Coinbase。', true);
+      });
+    });
   }
-  throw new Error("無法連線至 Binance 公開數據源");
-}
 
-async function fetchAndRender() {
-  document.getElementById('status-line').innerText = '⏳ 正在向 Binance 抓取最新日線與週線數據...';
-  try {
-    const [dRaw, wRaw] = await Promise.all([
-      fetchKlines('1d', 1000),
-      fetchKlines('1w', 300)
-    ]);
+  function refreshLatest() {
+    if (S.mode !== 'live') return;
+    var url = 'https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=3';
+    fetch(url).then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (rows) {
+      rows.forEach(function (r) {
+        var c = { t: r[0], o: +r[1], h: +r[2], l: +r[3], c: +r[4] };
+        var last = S.daily[S.daily.length - 1];
+        if (c.t === last.t) S.daily[S.daily.length - 1] = c;
+        else if (c.t > last.t) S.daily.push(c);
+      });
+      S.updated = new Date();
+      recompute(); renderText(); renderCharts(true);
+    }).catch(function () {});
+  }
 
-    const dTime = dRaw.map(r => r[0]);
-    const dOpen = dRaw.map(r => parseFloat(r[1]));
-    const dHigh = dRaw.map(r => parseFloat(r[2]));
-    const dLow  = dRaw.map(r => parseFloat(r[3]));
-    const dClose= dRaw.map(r => parseFloat(r[4]));
-    const dMa360 = calcSMA(dClose, 360);
+  function loadChips() {
+    L.fetchChips().then(function (c) { S.chips = c; renderChips(); }).catch(function () { S.chips = null; renderChips(); });
+  }
 
-    const wTime = wRaw.map(r => r[0]);
-    const wHigh = wRaw.map(r => parseFloat(r[2]));
-    const wClose= wRaw.map(r => parseFloat(r[4]));
-    const wMa50 = calcSMA(wClose, 50);
+  function showBanner(text, isErr) {
+    var b = $('banner'); b.textContent = text; b.hidden = false; b.className = 'banner' + (isErr ? ' err' : '');
+  }
 
-    const ema12 = calcEMA(wClose, 12);
-    const ema26 = calcEMA(wClose, 26);
-    const wDif = ema12.map((v, i) => v - ema26[i]);
-    const wDea = calcEMA(wDif, 9);
-    const wHist = wDif.map((v, i) => v - wDea[i]);
+  function recompute() {
+    var p = Object.assign({}, S.params, { fibWeeks: S.fibSpan });
+    S.res = L.analyze(S.daily, p);
+  }
 
-    // Map weekly MA50 & MACD onto daily timeline
-    let mappedWMa50 = new Array(dTime.length).fill(null);
-    let mappedWDif  = new Array(dTime.length).fill(null);
-    let mappedWDea  = new Array(dTime.length).fill(null);
-    let mappedWHist = new Array(dTime.length).fill(null);
+  function ready() {
+    fillParamForm();
+    if (!$('lc-entry').value) $('lc-entry').value = Math.round(S.daily[S.daily.length - 1].c);
+    recompute();
+    $('lc-mmr').value = S.res.params.mmrPct;
+    renderText();
+    renderCharts(false);
+    renderChips();
+  }
 
-    let wIdx = 0;
-    for (let i = 0; i < dTime.length; i++) {
-      while (wIdx + 1 < wTime.length && wTime[wIdx + 1] <= dTime[i]) {
-        wIdx++;
+  /* ---------- 文字區塊 ---------- */
+  function renderText() {
+    var r = S.res, x = r.last, d = S.daily, n = d.length;
+    var price = d[n - 1].c, prevC = n > 1 ? d[n - 2].c : price;
+    $('price').textContent = fUsd(price);
+    var ch = (price / prevC - 1) * 100;
+    $('chg').textContent = fPct(ch, 2) + ' 今日';
+    $('chg').className = 'chg ' + cls(ch);
+    var when = S.mode === 'preview' ? '資料日期 ' + fDate(d[n - 1].t) : '更新於 ' + (S.updated || new Date()).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    $('src').textContent = '來源：' + S.source + '　' + when;
+
+    if (!x) { showBanner('資料不足，無法計算日MA360（需要至少 360 天的資料）。', true); return; }
+    var p = r.params;
+    var dPrev = r.dMA[n - 1 - p.dSlopeDays], wPrev = r.wMAd[n - 1 - 7 * p.wSlopeWeeks];
+    var dSlope = dPrev ? (x.dMA / dPrev - 1) * 100 : null, wSlope = wPrev ? (x.wMA / wPrev - 1) * 100 : null;
+    var lower = Math.min(x.dMA, x.wMA);
+
+    // 四個結論
+    var v = [];
+    v.push(x.zone === 'hold' ? ['good', '持有區', '已站上日MA360 與週MA50']
+      : x.zone === 'out' ? ['bad', '空手區', '已跌破兩條線']
+      : ['warn', '觀望區', '價格夾在兩條線之間']);
+    if (x.entry) v.push([r.divRecent ? 'warn' : 'good', '符合開多', r.divRecent ? '5 項全符合，但近半年出現過週MACD頂背離，要特別小心' : '5 項條件全部符合']);
+    else v.push(['', '尚未符合', '5 項條件符合 ' + x.condsMet + ' 項']);
+    if (r.divNow.active) v.push(['bad', '頂背離', '週MACD 出現頂背離，牛頂訊號']);
+    else if (x.belowBoth) v.push(['bad', '跌破兩線', '延後指標已觸發，應出場']);
+    else if (!x.aboveBoth) v.push(['warn', '跌破一條', (x.aboveD ? '週MA50' : '日MA360') + ' 已跌破，留意']);
+    else v.push(['good', '無', '兩項出場訊號都沒有出現']);
+    v.push(x.addAllowed ? ['good', '允許', '兩線上揚且價格在線上，有保護線'] : ['bad', '禁止', '兩線還沒都上揚或價格不在線上，浮盈加倉會被強平']);
+    var vEls = $('verdicts').children;
+    v.forEach(function (it, i) {
+      var el = vEls[i];
+      el.className = 'verdict ' + it[0];
+      el.innerHTML = '<span class="k">' + el.querySelector('.k').textContent + '</span><span class="v">' + it[1] + '</span><span class="d">' + it[2] + '</span>';
+    });
+
+    // 開多條件
+    var c = x.conds;
+    $('entry-count').textContent = '符合 ' + x.condsMet + ' / 5';
+    $('entry-checks').innerHTML = [
+      [c.aboveBoth, '突破週MA50 + 日MA360', '價格同時在兩條線之上', x.aboveD && x.aboveW ? '兩條都在上' : (x.aboveD ? '只站上日線' : x.aboveW ? '只站上週線' : '兩條都在下')],
+      [c.stayed, '站上一陣子', '連續站上兩線至少 ' + p.daysAboveMin + ' 天', x.daysAbove + ' 天'],
+      [c.dRising, '日MA360 上揚', '比 ' + p.dSlopeDays + ' 天前高', fPct(dSlope, 2)],
+      [c.wRising, '週MA50 上揚', '比 ' + p.wSlopeWeeks + ' 週前高', fPct(wSlope, 2)],
+      [c.near, '回撤到線附近', '距離較近的那條線 ' + p.nearPct + '% 以內', fPct(Math.min(x.distD, x.distW))]
+    ].map(function (row) {
+      return '<li>' + icon(row[0] ? 'ok' : 'no') + '<div><div class="t">' + row[1] + '</div><div class="s">' + row[2] + '</div></div><div class="val">' + row[3] + '</div></li>';
+    }).join('');
+    $('entry-note').textContent = x.entry
+      ? (r.divRecent ? '條件都符合，但最近出現過頂背離。歷史上 2021/12、2025/10 的開多訊號都出現在背離之後的高檔，進場前請再三確認。' : '條件全部符合。止損參考：' + fUsd(r.stop) + '。')
+      : '還沒全部符合前，依原則不開多單。';
+
+    // 出場訊號
+    var dv = r.divNow, divState = dv.active ? 'no' : (dv.newHigh ? 'wa' : 'ok');
+    var divDetail = dv.prevT
+      ? '本波高點 ' + fUsd(dv.candH) + '（' + fDate(dv.candT) + '），前高 ' + fUsd(dv.prevH) + '（' + fDate(dv.prevT) + '）'
+      : '找不到可比較的前一個波段高點';
+    var divVal = dv.active ? '已出現' : dv.newHigh ? 'MACD 仍跟上' : '未創新高';
+    $('exit-checks').innerHTML =
+      '<li>' + icon(dv.active ? 'no' : 'ok') + '<div><div class="t">週MACD 頂背離（敏感指標）</div><div class="s">' + divDetail + '</div></div><div class="val">' + divVal + '</div></li>' +
+      '<li>' + icon(x.belowBoth ? 'no' : !x.aboveBoth ? 'wa' : 'ok') + '<div><div class="t">跌破週MA50 + 日MA360（延後指標）</div><div class="s">' +
+      (x.belowBoth ? '兩條線都已跌破' : !x.aboveBoth ? '已跌破' + (x.aboveD ? '週MA50' : '日MA360') + '，另一條還在' : '價格仍在兩條線之上') +
+      '</div></div><div class="val">' + (x.belowBoth ? '已觸發' : !x.aboveBoth ? '一半' : '未觸發') + '</div></li>';
+
+    $('lines-table').innerHTML =
+      '<thead><tr><th></th><th class="r">數值</th><th class="r">價格距離</th><th class="r">斜率</th></tr></thead><tbody>' +
+      '<tr><td><span class="sw" style="background:var(--accent)"></span> 日MA360</td><td class="r num">' + fUsd(x.dMA) + '</td><td class="r num ' + cls(x.distD) + '">' + fPct(x.distD) + '</td><td class="r">' + slopePill(x.dRising) + '</td></tr>' +
+      '<tr><td><span class="sw" style="background:var(--wline)"></span> 週MA50</td><td class="r num">' + fUsd(x.wMA) + '</td><td class="r num ' + cls(x.distW) + '">' + fPct(x.distW) + '</td><td class="r">' + slopePill(x.wRising) + '</td></tr>' +
+      (x.aboveBoth
+        ? '<tr><td>建議止損</td><td class="r num">' + fUsd(r.stop) + '</td><td class="r num neg">' + fPct((r.stop / price - 1) * 100) + '</td><td class="r small muted">較低線 −' + p.stopBufferPct + '%</td></tr>'
+        : '<tr><td>建議止損</td><td class="r muted small" colspan="3">價格在線下，不持有多單</td></tr>') +
+      '</tbody>';
+    if (x.aboveBoth && !(x.dRising && x.wRising)) {
+      $('lines-table').innerHTML += '<caption class="note" style="caption-side:bottom;text-align:left;padding-top:6px">兩線還沒都上揚，止損線還沒有「保護」作用，數字只供參考。</caption>';
+    }
+
+    renderLiq(); renderFib(); renderHistory();
+    S.lower = lower;
+  }
+
+  function slopePill(up) { return up ? '<span class="pill good">上揚</span>' : '<span class="pill bad">下彎</span>'; }
+
+  /* ---------- 強平價 ---------- */
+  function renderLiq() {
+    var r = S.res, x = r.last; if (!x) return;
+    var p = r.params, lower = Math.min(x.dMA, x.wMA);
+    var entry = num('lc-entry'), lev = num('lc-lev'), mmr = num('lc-mmr');
+    if (mmr == null) mmr = p.mmrPct;
+    var manual = num('lc-manual');
+    var out = [];
+    if (!entry || !lev || lev < 1) { $('liq-out').innerHTML = '<div class="note">請填開倉均價與槓桿（至少 1 倍）。</div>'; S.liq = null; return; }
+    var liq = manual || L.liqLong(entry, lev, mmr);
+    S.liq = liq;
+    out.push('<div class="row"><span>' + (manual ? '強平價（交易所）' : '估算強平價') + '</span><b>' + fUsd(liq) + '</b></div>');
+    out.push('<div class="row"><span>兩線中較低的那條</span><b>' + fUsd(lower) + '</b></div>');
+    if (!x.aboveBoth) {
+      out.push('<div class="verdict-line warn">! 目前價格不在兩條線之上，依原則 4️⃣ 還不是開多單的時機</div>');
+    }
+    if (liq < lower) {
+      out.push('<div class="verdict-line good">✓ 強平價在兩條線下方（比較低那條再低 ' + ((1 - liq / lower) * 100).toFixed(1) + '%）</div>');
+    } else {
+      out.push('<div class="verdict-line bad">✕ 強平價在兩條線之上，價格回到線上就可能先被強平</div>');
+    }
+    if (x.aboveBoth && r.stop) {
+      if (liq >= r.stop) out.push('<div class="verdict-line warn">! 強平價高於建議止損 ' + fUsd(r.stop) + '，止損會來不及觸發</div>');
+      if (!manual && entry > r.stop) {
+        var maxLev = L.maxLeverage(entry, r.stop, mmr);
+        out.push('<div class="row"><span>要讓強平價低於止損線，槓桿最多</span><b>' + maxLev.toFixed(2) + ' 倍</b></div>');
       }
-      mappedWMa50[i] = wMa50[wIdx];
-      mappedWDif[i]  = wDif[wIdx];
-      mappedWDea[i]  = wDea[wIdx];
-      mappedWHist[i] = wHist[wIdx];
     }
+    var q1 = num('lc-qty'), q2 = num('lc-addqty'), ap = num('lc-addprice') || S.daily[S.daily.length - 1].c;
+    if (q1 && q2 && q1 > 0 && q2 > 0) {
+      var avg = (q1 * entry + q2 * ap) / (q1 + q2);
+      var liq2 = L.liqLong(avg, lev, mmr);
+      out.push('<div class="subhead">加倉後</div>');
+      out.push('<div class="row"><span>新的開倉均價</span><b>' + fUsd(avg) + '</b></div>');
+      out.push('<div class="row"><span>新的強平價（同槓桿）</span><b>' + fUsd(liq2) + '（' + fPct((liq2 / L.liqLong(entry, lev, mmr) - 1) * 100) + '）</b></div>');
+      if (!x.addAllowed) out.push('<div class="verdict-line bad">✕ 依原則現在不能浮盈加倉：兩線還沒都上揚或價格不在線上</div>');
+      else if (liq2 >= lower) out.push('<div class="verdict-line bad">✕ 加倉後強平價會跑到兩線之上</div>');
+      else out.push('<div class="verdict-line good">✓ 加倉後強平價仍在兩線下方</div>');
+    }
+    $('liq-out').innerHTML = out.join('');
+  }
 
-    const nD = dClose.length - 1;
-    const nW = wClose.length - 1;
+  /* ---------- 斐波那契 ---------- */
+  function renderFib() {
+    var f = S.res.fib; if (!f) return;
+    var price = S.daily[S.daily.length - 1].c;
+    var all = f.levels.concat(f.ext).sort(function (a, b) { return b.price - a.price; });
+    var nearest = all.reduce(function (best, l) { return Math.abs(l.price - price) < Math.abs(best.price - price) ? l : best; }, all[0]);
+    $('fib-note').textContent = (f.up ? '上漲波段' : '下跌波段') + '：低點 ' + fUsd(f.low) + '（' + fDate(f.lowT) + '）→ 高點 ' + fUsd(f.high) + '（' + fDate(f.highT) + '）';
+    $('fib-table').innerHTML = '<thead><tr><th>比例</th><th class="r">價格</th><th class="r">距現價</th></tr></thead><tbody>' +
+      all.map(function (l) {
+        return '<tr' + (l === nearest ? ' class="hl"' : '') + '><td class="num">' + l.ratio.toFixed(3) + (l.ext ? ' <span class="muted small">延伸</span>' : '') + '</td><td class="r num">' + fUsd(l.price) + '</td><td class="r num ' + cls((l.price / price - 1) * 100) + '">' + fPct((l.price / price - 1) * 100) + '</td></tr>';
+      }).join('') + '</tbody>';
+  }
 
-    STATE = {
-      currPrice: dClose[nD],
-      currDMa360: dMa360[nD],
-      currWMa50: wMa50[nW],
-      dSlopeUp: dMa360[nD] > dMa360[nD - 5],
-      wSlopeUp: wMa50[nW] > wMa50[nW - 3],
-      dTime, dOpen, dHigh, dLow, dClose, dMa360,
-      mappedWMa50, mappedWDif, mappedWDea, mappedWHist,
-      wHigh, wDif,
-      liqPrice: 0,
-      newAvgEntry: 0
+  /* ---------- 籌碼 ---------- */
+  function renderChips() {
+    var el = $('chips');
+    if (S.mode === 'preview') { el.innerHTML = '<div class="note">預覽版沒有即時籌碼資料。正式版會顯示資金費率、合約持倉量、多空比，並附上「莊家視角」的解讀。</div>'; return; }
+    if (S.mode === 'snapshot') { el.innerHTML = '<div class="note">目前連不上 Binance，籌碼資料暫時無法顯示。</div>'; return; }
+    var c = S.chips;
+    if (c === null && S.res) { el.innerHTML = '<div class="note">籌碼資料抓不到（Binance 合約 API 可能在你所在的地區被限制）。</div>'; return; }
+    if (!c) { el.innerHTML = '<div class="note">載入中…</div>'; return; }
+    var d = S.daily, n = d.length, p30 = n > 30 ? (d[n - 1].c / d[n - 31].c - 1) * 100 : null;
+    var rows = [], notes = [];
+    if (c.funding != null) {
+      rows.push(['資金費率（每 8 小時）', fPct(c.funding, 4)]);
+      if (c.funding > 0.03) notes.push(['warn', '資金費率偏高：做多的人很擁擠、付很多錢在撐。莊家視角：這種時候最容易往下洗一波，把高槓桿多單清掉。']);
+      else if (c.funding < 0) notes.push(['warn', '資金費率為負：空方擁擠。莊家視角：容易拉一根軋空，讓空單爆倉。']);
+      else notes.push(['', '資金費率中性，沒有明顯一面倒。']);
+    }
+    if (c.funding30 != null) rows.push(['近 30 天平均費率', fPct(c.funding30, 4)]);
+    if (c.oi != null) rows.push(['合約持倉量', '$' + (c.oi / 1e9).toFixed(2) + 'B']);
+    if (c.oiChange30 != null) {
+      rows.push(['持倉量 30 天變化', fPct(c.oiChange30)]);
+      if (p30 != null) {
+        var t;
+        if (p30 > 0 && c.oiChange30 > 0) t = '價漲、持倉增：上漲靠槓桿推動，回檔時容易連環爆倉。';
+        else if (p30 > 0 && c.oiChange30 <= 0) t = '價漲、持倉減：空單回補或去槓桿上漲，相對健康。';
+        else if (p30 <= 0 && c.oiChange30 > 0) t = '價跌、持倉增：新空單在進場，一旦反彈可能軋空。';
+        else t = '價跌、持倉減：多單在認賠出場，正在去槓桿。';
+        notes.push(['', '近 30 天 ' + t]);
+      }
+    }
+    if (c.ls != null) {
+      rows.push(['散戶多空人數比', c.ls.toFixed(2)]);
+      if (c.ls > 1.5) notes.push(['warn', '多數散戶在做多。莊家視角：散戶一面倒時，反方向的機率要多想一下。']);
+      else if (c.ls < 0.8) notes.push(['warn', '多數散戶在做空。莊家視角：小心反向拉升軋空。']);
+    }
+    if (c.lsTop != null) rows.push(['大戶持倉多空比', c.lsTop.toFixed(2)]);
+    el.innerHTML = '<div class="tbl"><table><tbody>' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td class="r num">' + r[1] + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+      '<ul class="checks" style="margin-top:8px">' + notes.map(function (x) { return '<li>' + icon(x[0] === 'warn' ? 'wa' : 'ok') + '<div class="small">' + x[1] + '</div><div></div></li>'; }).join('') + '</ul>';
+  }
+
+  /* ---------- 歷史 ---------- */
+  function zoneName(z) { return z === 'hold' ? '<span class="pill good">站上兩線</span>' : z === 'out' ? '<span class="pill bad">跌破兩線</span>' : '<span class="pill warn">兩線之間</span>'; }
+  function fwdCell(v) { return '<td class="r num ' + cls(v) + '">' + (v == null ? '<span class="muted">未到</span>' : fPct(v, 0)) + '</td>'; }
+
+  function renderHistory() {
+    var r = S.res;
+    $('sim-table').innerHTML = r.similar.length
+      ? '<thead><tr><th>日期</th><th class="r">當時價格</th><th class="r">之後 30 天</th><th class="r">90 天</th><th class="r">180 天</th></tr></thead><tbody>' +
+        r.similar.map(function (s) {
+          return '<tr><td><div class="num">' + fDate(s.t) + '</div><div class="small muted">' + zoneName(s.zone) + ' 距日線 ' + fPct(s.distD, 0) + '</div></td><td class="r num">' + fUsd(s.price) + '</td>' + fwdCell(s.fwd.d30) + fwdCell(s.fwd.d90) + fwdCell(s.fwd.d180) + '</tr>';
+        }).join('') + '</tbody>'
+      : '<tbody><tr><td class="muted">資料不足</td></tr></tbody>';
+
+    var ev = r.events.slice(-12).reverse();
+    $('ev-table').innerHTML = '<thead><tr><th>日期</th><th>事件</th><th class="r">價格</th><th class="r">90 天後</th><th class="r">180 天後</th></tr></thead><tbody>' +
+      ev.map(function (e) { return '<tr><td class="num">' + fDate(e.t) + '</td><td>' + zoneName(e.type) + '</td><td class="r num">' + fUsd(e.price) + '</td>' + fwdCell(e.fwd.d90) + fwdCell(e.fwd.d180) + '</tr>'; }).join('') + '</tbody>';
+
+    var dv = r.divergences.slice().reverse();
+    var closes = S.res.weeks;
+    $('div-table').innerHTML = dv.length
+      ? '<thead><tr><th>背離高點</th><th>對比前高</th><th class="r">之後最大跌幅</th></tr></thead><tbody>' +
+        dv.map(function (x) {
+          var minL = Infinity;
+          for (var j = x.idx; j < closes.length && j <= x.idx + 52; j++) minL = Math.min(minL, closes[j].l);
+          var dd = (minL / x.h - 1) * 100;
+          return '<tr><td><div class="num">' + fDate(x.t) + '</div><div class="small muted num">' + fUsd(x.h) + '</div></td><td><div class="num">' + fDate(x.prevT) + '</div><div class="small muted num">' + fUsd(x.prevH) + '</div></td><td class="r num neg">' + fPct(dd, 0) + '</td></tr>';
+        }).join('') + '</tbody>'
+      : '<tbody><tr><td class="muted">這段期間沒有出現週MACD 頂背離</td></tr></tbody>';
+  }
+
+  /* ---------- 圖表 ---------- */
+  function clearCharts() { S.charts.forEach(function (c) { c.remove(); }); S.charts = []; }
+
+  function baseOpts() {
+    return {
+      autoSize: true,
+      layout: { background: { type: 'solid', color: css('--surface') }, textColor: css('--muted'), fontFamily: 'IBM Plex Mono, ui-monospace, monospace', fontSize: 11 },
+      grid: { vertLines: { color: css('--grid') }, horzLines: { color: css('--grid') } },
+      rightPriceScale: { borderColor: css('--line'), minimumWidth: 72 },
+      timeScale: { borderColor: css('--line') },
+      crosshair: { mode: 0 },
+      localization: { locale: 'zh-TW', dateFormat: 'yyyy/MM/dd' }
     };
-
-    document.getElementById('status-line').innerText =
-      `✅ 已同步 Binance BTCUSDT 最新數據｜最後更新時間：${new Date().toLocaleTimeString()}`;
-
-    updateMetrics();
-    updateRiskAndChart();
-  } catch (err) {
-    document.getElementById('status-line').innerText = '❌ 數據讀取失敗：' + err.message;
   }
-}
+  var PF = { type: 'price', precision: 0, minMove: 1 };
+  function ts(t) { return Math.floor(t / 1000); }
+  function lineData(times, vals) { return times.map(function (t, i) { return vals[i] == null ? { time: t } : { time: t, value: vals[i] }; }); }
 
-function fmtUSD(v) {
-  if (v === null || isNaN(v)) return '--';
-  return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
-}
+  function renderCharts(keepRange) {
+    if (!S.res || typeof LightweightCharts === 'undefined') return;
+    var main = $('chart-main'), macdEl = $('chart-macd');
+    var prevRange = keepRange && S.charts[0] ? S.charts[0].timeScale().getVisibleLogicalRange() : null;
+    clearCharts();
+    var r = S.res, up = css('--up'), down = css('--down'), warn = css('--warn');
+    var showFib = $('tg-fib').checked, showRisk = $('tg-risk').checked, showMark = $('tg-mark').checked;
+    var LS = LightweightCharts.LineStyle;
+    var legend = [];
 
-function updateMetrics() {
-  const s = STATE;
-  const upperMa = Math.max(s.currDMa360, s.currWMa50);
-  const lowerMa = Math.min(s.currDMa360, s.currWMa50);
-  const distPct = ((s.currPrice - upperMa) / upperMa) * 100;
+    var chart = LightweightCharts.createChart(main, baseOpts());
+    S.charts.push(chart);
+    var candleOpts = { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down, priceFormat: PF };
+    var candles = chart.addCandlestickSeries(candleOpts);
 
-  document.getElementById('v-price').innerText = '$' + s.currPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  document.getElementById('v-price-sub').innerText = `較低保護線: ${fmtUSD(lowerMa)} ｜ 較高保護線: ${fmtUSD(upperMa)}`;
-  document.getElementById('v-dma360').innerText = fmtUSD(s.currDMa360);
-  document.getElementById('v-dslope').innerHTML = s.dSlopeUp
-    ? '<span class="badge badge-green">📈 確定上揚 (大於5日前)</span>'
-    : '<span class="badge badge-red">📉 走平或下彎</span>';
-
-  document.getElementById('v-wma50').innerText = fmtUSD(s.currWMa50);
-  document.getElementById('v-wslope').innerHTML = s.wSlopeUp
-    ? '<span class="badge badge-green">📈 確定上揚 (大於3週前)</span>'
-    : '<span class="badge badge-red">📉 走平或下彎</span>';
-
-  document.getElementById('v-dist').innerText = (distPct >= 0 ? '+' : '') + distPct.toFixed(2) + '%';
-
-  const aboveBoth = s.currPrice > s.currDMa360 && s.currPrice > s.currWMa50;
-  const belowBoth = s.currPrice < s.currDMa360 && s.currPrice < s.currWMa50;
-
-  let stood14 = true;
-  for (let i = s.dClose.length - 14; i < s.dClose.length; i++) {
-    if (s.dClose[i] <= s.currDMa360 || s.dClose[i] <= s.currWMa50) stood14 = false;
-  }
-  const bothUp = s.dSlopeUp && s.wSlopeUp;
-  const inPullback = aboveBoth && distPct >= 0 && distPct <= 4.5;
-
-  const sb = document.getElementById('spot-banner');
-  if (aboveBoth) {
-    sb.className = 'banner badge-green';
-    sb.innerText = '🟢 【現貨傻瓜法：買進 / 續抱牛市】價格同時突破日線 MA360 與週線 MA50';
-  } else if (belowBoth) {
-    sb.className = 'banner badge-red';
-    sb.innerText = '🔴 【現貨傻瓜法：賣出 / 空倉避險】價格同時跌破日線 MA360 與週線 MA50';
-  } else {
-    sb.className = 'banner badge-amber';
-    sb.innerText = '🟡 【現貨傻瓜法：夾縫震盪區】價格卡在日線 MA360 與週線 MA50 之間，等待雙線突破';
-  }
-
-  document.getElementById('c-break').innerHTML = aboveBoth
-    ? '<span class="badge badge-green">✅ 已突破雙均線</span>'
-    : '<span class="badge badge-red">❌ 未同時站上</span>';
-  document.getElementById('c-stood').innerHTML = stood14
-    ? '<span class="badge badge-green">✅ 連站 14 日</span>'
-    : '<span class="badge badge-amber">⏳ 尚未滿 14 日</span>';
-  document.getElementById('c-slope').innerHTML = bothUp
-    ? '<span class="badge badge-green">✅ 雙線上揚 (有保護線)</span>'
-    : '<span class="badge badge-red">🛑 未同步上揚 (禁浮盈加倉)</span>';
-  document.getElementById('c-pullback').innerHTML = (aboveBoth && bothUp && inPullback)
-    ? '<span class="badge badge-green">🎯 觸發回撤買點！</span>'
-    : `<span class="badge badge-amber">乖離 ${distPct.toFixed(1)}%</span>`;
-  document.getElementById('c-sl').innerText = fmtUSD(lowerMa * 0.95);
-
-  // Weekly MACD divergence
-  const nW = s.wHigh.length;
-  let pastH = -Infinity, pastIdx = -1;
-  for (let i = nW - 52; i < nW - 8; i++) {
-    if (s.wHigh[i] > pastH) { pastH = s.wHigh[i]; pastIdx = i; }
-  }
-  let currH = -Infinity, currIdx = -1;
-  for (let i = nW - 8; i < nW; i++) {
-    if (s.wHigh[i] > currH) { currH = s.wHigh[i]; currIdx = i; }
-  }
-  const pastDif = s.wDif[pastIdx];
-  const currDif = s.wDif[currIdx];
-  const isDiv = (currH > pastH) && (currDif < pastDif) && (currDif > 0);
-
-  document.getElementById('c-div').innerHTML = isDiv
-    ? '<span class="badge badge-red">⚠️ 週線頂背離警報！</span>'
-    : '<span class="badge badge-green">✅ 無頂背離</span>';
-  document.getElementById('c-div-detail').innerText =
-    `前波高點 ${fmtUSD(pastH)} (週DIF: ${pastDif.toFixed(0)}) vs 近8週高點 ${fmtUSD(currH)} (週DIF: ${currDif.toFixed(0)})`;
-  document.getElementById('c-exit').innerHTML = belowBoth
-    ? '<span class="badge badge-red">🔴 跌破雙均線！立刻出場</span>'
-    : '<span class="badge badge-green">🟢 未跌破雙線</span>';
-
-  // Fibonacci 180d
-  const h180 = Math.max(...s.dHigh.slice(-180));
-  const l180 = Math.min(...s.dLow.slice(-180));
-  const diff = h180 - l180;
-  const fibs = [
-    ['波段高點 (0.0)', h180],
-    ['Fib 0.382', h180 - 0.382 * diff],
-    ['Fib 0.500', h180 - 0.500 * diff],
-    ['Fib 0.618 (獵殺區)', h180 - 0.618 * diff],
-    ['Fib 0.786', h180 - 0.786 * diff],
-    ['波段低點 (1.0)', l180]
-  ];
-  document.getElementById('fib-container').innerHTML = fibs.map(([k, v]) => `
-    <div class="fib-box">
-      <div style="color:var(--text-muted)">${k}</div>
-      <div class="val">${fmtUSD(v)}</div>
-    </div>
-  `).join('');
-}
-
-function updateRiskAndChart() {
-  if (!STATE) return;
-  const entry = parseFloat(document.getElementById('in-entry').value) || 0;
-  const lev   = parseFloat(document.getElementById('in-lev').value) || 1;
-  const addP  = parseFloat(document.getElementById('in-addp').value) || 0;
-  const addR  = parseFloat(document.getElementById('in-addr').value) || 0;
-
-  const mmr = 0.005;
-  const newAvg = (addP > 0 && addR > 0) ? (entry + addP * addR) / (1 + addR) : entry;
-  const liq = newAvg * (1 - (1 / lev) + mmr);
-
-  STATE.newAvgEntry = newAvg;
-  STATE.liqPrice = liq;
-
-  const lowerMa = Math.min(STATE.currDMa360, STATE.currWMa50);
-  const safeLine = lowerMa * 0.95;
-  const bothUp = STATE.dSlopeUp && STATE.wSlopeUp;
-
-  const rb = document.getElementById('risk-box');
-  const summary = `持倉均價：${fmtUSD(newAvg)} ｜ 預估強平價：${fmtUSD(liq)} ｜ 雙均線下方安全防線：${fmtUSD(safeLine)} — `;
-
-  if (addR > 0 && !bothUp) {
-    rb.className = 'banner badge-red';
-    rb.innerText = summary + '🛑 【違反原則2】雙均線未同步上揚前嚴禁浮盈加倉！倉體變大只要回落原處必被強平！';
-  } else if (liq >= lowerMa) {
-    rb.className = 'banner badge-red';
-    rb.innerText = summary + '💀 【致命強平風險】強平價高於保護均線！莊家回踩均線測試支撐時你會直接爆倉！';
-  } else if (liq >= safeLine) {
-    rb.className = 'banner badge-amber';
-    rb.innerText = summary + '⚠️ 【插針警告】強平價雖低於均線，但距離均線不足 5%，小心莊家向下插針獵殺！';
-  } else {
-    rb.className = 'banner badge-green';
-    rb.innerText = summary + '🛡️ 【安全過關】強平價遠在日線 MA360 與週線 MA50 之下，具備抗洗盤保護力。';
-  }
-
-  drawCanvasChart();
-}
-
-function drawCanvasChart(hoverIndex = null) {
-  const canvas = document.getElementById('kchart');
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width;
-  const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  const N = 360; // 繪製最近 360 天
-  const s = STATE;
-  const startIdx = s.dClose.length - N;
-
-  const padL = 65, padR = 75, padT = 20, padB = 30;
-  const priceH = 360;
-  const macdTop = padT + priceH + 30;
-  const macdH = H - macdTop - padB;
-  const plotW = W - padL - padR;
-
-  // 計算價格區間最大最小值 (納入均線與強平價)
-  let minP = Infinity, maxP = -Infinity;
-  let minM = Infinity, maxM = -Infinity;
-
-  for (let i = startIdx; i < s.dClose.length; i++) {
-    if (s.dLow[i] < minP) minP = s.dLow[i];
-    if (s.dHigh[i] > maxP) maxP = s.dHigh[i];
-    if (s.dMa360[i] !== null) {
-      if (s.dMa360[i] < minP) minP = s.dMa360[i];
-      if (s.dMa360[i] > maxP) maxP = s.dMa360[i];
+    if (S.tab === 'd') {
+      macdEl.hidden = true;
+      var times = S.daily.map(function (c) { return ts(c.t); });
+      candles.setData(S.daily.map(function (c) { return { time: ts(c.t), open: c.o, high: c.h, low: c.l, close: c.c }; }));
+      chart.addLineSeries({ color: css('--accent'), lineWidth: 2, priceFormat: PF, lastValueVisible: true, priceLineVisible: false, crosshairMarkerVisible: false }).setData(lineData(times, r.dMA));
+      chart.addLineSeries({ color: css('--wline'), lineWidth: 2, priceFormat: PF, lastValueVisible: true, priceLineVisible: false, crosshairMarkerVisible: false }).setData(lineData(times, r.wMAd));
+      legend.push('<span><span class="sw" style="background:var(--accent)"></span>日MA360</span>', '<span><span class="sw" style="background:var(--wline)"></span>週MA50</span>');
+      if (showMark) {
+        var marks = [];
+        r.events.forEach(function (e) {
+          marks.push(e.type === 'hold'
+            ? { time: ts(e.t), position: 'belowBar', color: up, shape: 'arrowUp', text: '站上' }
+            : { time: ts(e.t), position: 'aboveBar', color: down, shape: 'arrowDown', text: '跌破' });
+        });
+        var inE = false;
+        r.day.forEach(function (d) {
+          if (d && d.entry && !inE) marks.push({ time: ts(d.t), position: 'belowBar', color: css('--wline'), shape: 'circle', text: '開多' });
+          inE = !!(d && d.entry);
+        });
+        marks.sort(function (a, b) { return a.time - b.time; });
+        candles.setMarkers(marks);
+        legend.push('<span class="mk" style="color:var(--up)">▲ 站上</span>', '<span class="mk" style="color:var(--down)">▼ 跌破</span>', '<span class="mk" style="color:var(--wline)">● 開多條件成立</span>');
+      }
+    } else {
+      macdEl.hidden = false;
+      var W = r.weeks, wt = W.map(function (w) { return ts(w.t); });
+      candles.setData(W.map(function (w) { return { time: ts(w.t), open: w.o, high: w.h, low: w.l, close: w.c }; }));
+      chart.addLineSeries({ color: css('--wline'), lineWidth: 2, priceFormat: PF, priceLineVisible: false, crosshairMarkerVisible: false }).setData(lineData(wt, r.wMA));
+      legend.push('<span><span class="sw" style="background:var(--wline)"></span>週MA50</span>');
+      if (showMark) {
+        candles.setMarkers(r.divergences.map(function (x) { return { time: ts(x.t), position: 'aboveBar', color: warn, shape: 'arrowDown', text: '背離' }; }));
+        legend.push('<span class="mk" style="color:var(--warn)">▼ 週MACD 頂背離</span>');
+      }
+      var mc = LightweightCharts.createChart(macdEl, Object.assign(baseOpts(), { timeScale: { borderColor: css('--line'), visible: true } }));
+      S.charts.push(mc);
+      var MPF = { type: 'price', precision: 0, minMove: 1 };
+      mc.addHistogramSeries({ priceFormat: MPF, priceLineVisible: false, lastValueVisible: false }).setData(wt.map(function (t, i) {
+        var h = r.macd.hist[i];
+        return h == null ? { time: t } : { time: t, value: h, color: h >= 0 ? 'rgba(127,140,160,.45)' : 'rgba(127,140,160,.25)' };
+      }));
+      var difS = mc.addLineSeries({ color: css('--ink'), lineWidth: 2, priceFormat: MPF, priceLineVisible: false });
+      difS.setData(lineData(wt, r.macd.dif));
+      mc.addLineSeries({ color: css('--accent'), lineWidth: 1, priceFormat: MPF, priceLineVisible: false }).setData(lineData(wt, r.macd.dea));
+      if (showMark) difS.setMarkers(r.divergences.map(function (x) { return { time: ts(x.t), position: 'aboveBar', color: warn, shape: 'circle', text: '' }; }));
+      legend.push('<span><span class="sw" style="background:var(--ink)"></span>DIF</span>', '<span><span class="sw" style="background:var(--accent)"></span>DEA</span>');
+      var syncing = false;
+      function link(a, b) {
+        a.timeScale().subscribeVisibleLogicalRangeChange(function (rg) {
+          if (!rg || syncing) return; syncing = true; b.timeScale().setVisibleLogicalRange(rg); syncing = false;
+        });
+      }
+      link(chart, mc); link(mc, chart);
     }
-    if (s.mappedWMa50[i] !== null) {
-      if (s.mappedWMa50[i] < minP) minP = s.mappedWMa50[i];
-      if (s.mappedWMa50[i] > maxP) maxP = s.mappedWMa50[i];
+
+    if (showFib && r.fib) {
+      r.fib.levels.forEach(function (l) {
+        candles.createPriceLine({ price: l.price, color: css('--muted'), lineWidth: 1, lineStyle: LS.Dotted, axisLabelVisible: false, title: 'Fib ' + l.ratio });
+      });
+      legend.push('<span class="mk">⋯ 斐波那契</span>');
     }
-    if (s.mappedWDif[i] !== null) {
-      minM = Math.min(minM, s.mappedWDif[i], s.mappedWDea[i], s.mappedWHist[i]);
-      maxM = Math.max(maxM, s.mappedWDif[i], s.mappedWDea[i], s.mappedWHist[i]);
+    if (showRisk) {
+      if (r.stop && r.last && r.last.aboveBoth) candles.createPriceLine({ price: r.stop, color: down, lineWidth: 1, lineStyle: LS.Dashed, axisLabelVisible: true, title: '止損' });
+      if (S.liq) candles.createPriceLine({ price: S.liq, color: warn, lineWidth: 1, lineStyle: LS.Dashed, axisLabelVisible: true, title: '強平' });
+      legend.push('<span class="mk" style="color:var(--down)">-- 止損</span>', '<span class="mk" style="color:var(--warn)">-- 強平</span>');
     }
-  }
-  if (s.liqPrice > minP * 0.5 && s.liqPrice < maxP * 1.2) {
-    minP = Math.min(minP, s.liqPrice * 0.96);
-    maxP = Math.max(maxP, s.liqPrice * 1.02);
-  }
-  const padP = (maxP - minP) * 0.06;
-  minP -= padP; maxP += padP;
+    $('legend').innerHTML = legend.join('');
 
-  const yPrice = (p) => padT + priceH - ((p - minP) / (maxP - minP)) * priceH;
-  const yMacd  = (m) => macdTop + macdH - ((m - minM) / (maxM - minM || 1)) * macdH;
-  const xPos   = (idx) => padL + ((idx + 0.5) / N) * plotW;
-
-  // 繪製背景網格線
-  ctx.strokeStyle = '#1e293b';
-  ctx.lineWidth = 1;
-  ctx.fillStyle = '#64748b';
-  ctx.font = '11px sans-serif';
-
-  for (let g = 0; g <= 5; g++) {
-    let val = minP + (maxP - minP) * (g / 5);
-    let y = yPrice(val);
-    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
-    ctx.fillText('$' + Math.round(val).toLocaleString(), W - padR + 6, y + 4);
+    var len = S.tab === 'd' ? S.daily.length : r.weeks.length;
+    var span = S.tab === 'd' ? 730 : 260;
+    chart.timeScale().setVisibleLogicalRange(prevRange || { from: Math.max(0, len - span), to: len + 3 });
   }
 
-  // MACD 0 軸線
-  if (minM < 0 && maxM > 0) {
-    let y0 = yMacd(0);
-    ctx.strokeStyle = '#334155';
-    ctx.beginPath(); ctx.moveTo(padL, y0); ctx.lineTo(W - padR, y0); ctx.stroke();
+  /* ---------- 參數 ---------- */
+  function fillParamForm() {
+    var p = Object.assign({}, L.DEFAULTS, S.params);
+    PARAM_KEYS.forEach(function (k) { $('p-' + k).value = p[k]; });
   }
 
-  // 繪製日 K 線與週 MACD 柱
-  const barW = Math.max(1.5, (plotW / N) * 0.65);
-  const yZero = yMacd(0);
+  /* ---------- 事件 ---------- */
+  $('btn-refresh').addEventListener('click', function () {
+    if (S.mode === 'preview') { recompute(); renderText(); renderCharts(true); return; }
+    if (S.mode === 'live') { refreshLatest(); loadChips(); } else { $('banner').hidden = true; load(); }
+  });
+  ['tab-d', 'tab-w'].forEach(function (id) {
+    $(id).addEventListener('click', function () {
+      S.tab = id === 'tab-d' ? 'd' : 'w';
+      $('tab-d').setAttribute('aria-pressed', S.tab === 'd');
+      $('tab-w').setAttribute('aria-pressed', S.tab === 'w');
+      store('btc-tab', S.tab);
+      renderCharts(false);
+    });
+  });
+  ['tg-fib', 'tg-risk', 'tg-mark'].forEach(function (id) { $(id).addEventListener('change', function () { renderCharts(true); }); });
+  $('liq-form').addEventListener('input', function () { if (!S.res) return; renderLiq(); renderCharts(true); });
+  $('liq-form').addEventListener('submit', function (e) { e.preventDefault(); });
+  $('param-form').addEventListener('submit', function (e) { e.preventDefault(); });
+  $('fib-span').addEventListener('change', function () { S.fibSpan = +this.value; if (!S.res) return; recompute(); renderFib(); renderCharts(true); });
+  $('p-apply').addEventListener('click', function () {
+    var p = {};
+    PARAM_KEYS.forEach(function (k) { var v = parseFloat($('p-' + k).value); if (isFinite(v)) p[k] = v; });
+    S.params = p; store('btc-params', JSON.stringify(p));
+    if (!S.res) return;
+    $('lc-mmr').value = p.mmrPct != null ? p.mmrPct : L.DEFAULTS.mmrPct;
+    recompute(); renderText(); renderCharts(true);
+  });
+  $('p-reset').addEventListener('click', function () {
+    S.params = {}; store('btc-params', '{}'); fillParamForm();
+    if (!S.res) return;
+    $('lc-mmr').value = L.DEFAULTS.mmrPct;
+    recompute(); renderText(); renderCharts(true);
+  });
 
-  for (let k = 0; k < N; k++) {
-    const i = startIdx + k;
-    const x = xPos(k);
-    const isUp = s.dClose[i] >= s.dOpen[i];
+  // 主題切換時重畫圖表
+  var mq = window.matchMedia('(prefers-color-scheme: dark)');
+  var onTheme = function () { if (S.res) renderCharts(true); };
+  if (mq.addEventListener) mq.addEventListener('change', onTheme);
+  new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-    // K線影線
-    ctx.strokeStyle = isUp ? '#10b981' : '#f43f5e';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, yPrice(s.dHigh[i]));
-    ctx.lineTo(x, yPrice(s.dLow[i]));
-    ctx.stroke();
+  var savedTab = store('btc-tab');
+  if (savedTab === 'w') { S.tab = 'w'; $('tab-d').setAttribute('aria-pressed', 'false'); $('tab-w').setAttribute('aria-pressed', 'true'); }
 
-    // K線實體
-    const topY = yPrice(Math.max(s.dOpen[i], s.dClose[i]));
-    const botY = yPrice(Math.min(s.dOpen[i], s.dClose[i]));
-    ctx.fillStyle = isUp ? '#10b981' : '#f43f5e';
-    ctx.fillRect(x - barW / 2, topY, barW, Math.max(1.5, botY - topY));
-
-    // 週 MACD Hist
-    const hVal = s.mappedWHist[i];
-    if (hVal !== null) {
-      const hy = yMacd(hVal);
-      ctx.fillStyle = hVal >= 0 ? 'rgba(16, 185, 129, 0.55)' : 'rgba(244, 63, 94, 0.55)';
-      ctx.fillRect(x - barW / 2, Math.min(yZero, hy), barW, Math.abs(hy - yZero));
-    }
-  }
-
-  // 繪製均線輔助函式
-  function drawLine(arr, yFn, color, width) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    let started = false;
-    for (let k = 0; k < N; k++) {
-      const v = arr[startIdx + k];
-      if (v === null) continue;
-      const x = xPos(k), y = yFn(v);
-      if (!started) { ctx.moveTo(x, y); started = true; }
-      else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }
-
-  drawLine(s.dMa360, yPrice, '#f59e0b', 2.2);
-  drawLine(s.mappedWMa50, yPrice, '#06b6d4', 2.2);
-  drawLine(s.mappedWDif, yMacd, '#eab308', 1.8);
-  drawLine(s.mappedWDea, yMacd, '#a855f7', 1.8);
-
-  // 繪製強平價紅虛線
-  if (s.liqPrice >= minP && s.liqPrice <= maxP) {
-    const ly = yPrice(s.liqPrice);
-    ctx.save();
-    ctx.strokeStyle = '#f43f5e';
-    ctx.lineWidth = 1.8;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath(); ctx.moveTo(padL, ly); ctx.lineTo(W - padR, ly); ctx.stroke();
-    ctx.fillStyle = '#f43f5e';
-    ctx.fillText(`強平價 ${fmtUSD(s.liqPrice)}`, padL + 8, ly - 6);
-    ctx.restore();
-  }
-
-  // 繪製 X 軸日期標籤
-  ctx.fillStyle = '#94a3b8';
-  for (let k = 0; k < N; k += 60) {
-    const d = new Date(s.dTime[startIdx + k]);
-    const label = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    ctx.fillText(label, xPos(k) - 28, H - 8);
-  }
-
-  // 繪製十字準星
-  if (hoverIndex !== null && hoverIndex >= 0 && hoverIndex < N) {
-    const hx = xPos(hoverIndex);
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath(); ctx.moveTo(hx, padT); ctx.lineTo(hx, H - padB); ctx.stroke();
-    ctx.restore();
-  }
-}
-
-// 綁定滑鼠互動事件
-const canvasEl = document.getElementById('kchart');
-const tooltipEl = document.getElementById('tooltip');
-
-canvasEl.addEventListener('mousemove', (e) => {
-  if (!STATE) return;
-  const rect = canvasEl.getBoundingClientRect();
-  const scaleX = canvasEl.width / rect.width;
-  const mx = (e.clientX - rect.left) * scaleX;
-  const padL = 65, padR = 75, N = 360;
-  const plotW = canvasEl.width - padL - padR;
-
-  const k = Math.floor(((mx - padL) / plotW) * N);
-  if (k < 0 || k >= N) {
-    tooltipEl.style.display = 'none';
-    drawCanvasChart(null);
-    return;
-  }
-  drawCanvasChart(k);
-  const idx = STATE.dClose.length - N + k;
-  const dt = new Date(STATE.dTime[idx]).toISOString().slice(0, 10);
-  tooltipEl.style.display = 'block';
-  tooltipEl.style.left = (e.clientX + 16) + 'px';
-  tooltipEl.style.top = (e.clientY - 20) + 'px';
-  tooltipEl.innerHTML = `
-    <div style="font-weight:700; margin-bottom:4px; color:#38bdf8">📅 ${dt}</div>
-    <div>收盤價：<b>${fmtUSD(STATE.dClose[idx])}</b></div>
-    <div style="color:#f59e0b">日線 MA360：<b>${fmtUSD(STATE.dMa360[idx])}</b></div>
-    <div style="color:#06b6d4">週線 MA50：<b>${fmtUSD(STATE.mappedWMa50[idx])}</b></div>
-    <div style="color:#eab308">週 MACD DIF：<b>${STATE.mappedWDif[idx]?.toFixed(1)}</b></div>
-    <div style="color:#a855f7">週 MACD DEA：<b>${STATE.mappedWDea[idx]?.toFixed(1)}</b></div>
-  `;
-});
-
-canvasEl.addEventListener('mouseleave', () => {
-  tooltipEl.style.display = 'none';
-  if (STATE) drawCanvasChart(null);
-});
-
-fetchAndRender();
+  load();
+  setInterval(refreshLatest, 60000);
+})();
 </script>
+
 </body>
 </html>
