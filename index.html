@@ -143,7 +143,7 @@ tr.hl td { background: color-mix(in srgb, var(--wline) 9%, transparent); }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; background: transparent; padding: 5px 12px; font-size: 13px; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
-.toggles { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+.toggles { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: center; font-size: 13px; }
 .toggles label { display: inline-flex; gap: 6px; align-items: center; }
 .chart { height: 340px; width: 100%; }
 .chart.macd { height: 150px; }
@@ -237,11 +237,12 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
       <label><input type="checkbox" id="tg-fib" checked> 斐波那契</label>
       <label><input type="checkbox" id="tg-risk" checked> 止損 / 強平線</label>
       <label><input type="checkbox" id="tg-mark" checked> 訊號標記</label>
+      <button class="btn" type="button" id="btn-latest">回到最新</button>
     </div>
     <div class="legend" id="legend"></div>
     <div class="chart" id="chart-main"></div>
     <div class="chart macd" id="chart-macd" hidden></div>
-    <div class="note">手指兩指縮放、左右拖曳可看更早的歷史。</div>
+    <div class="note">兩指縮放、左右拖曳看更早的歷史。右側彩色標籤是畫面最右邊那一天的數值；拖回歷史時會跟著變，按「回到最新」即可回到今天。</div>
   </section>
 
   <div class="grid2">
@@ -689,8 +690,10 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
 
     var chart = LightweightCharts.createChart(main, baseOpts());
     S.charts.push(chart);
-    var candleOpts = { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down, priceFormat: PF };
+    var candleOpts = { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down, priceFormat: PF, priceLineVisible: false };
     var candles = chart.addCandlestickSeries(candleOpts);
+    // 現價虛線（不論圖拖到哪裡，都標出最新價格）
+    candles.createPriceLine({ price: S.daily[S.daily.length - 1].c, color: css('--ink'), lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true, title: '現價' });
 
     if (S.tab === 'd') {
       macdEl.hidden = true;
@@ -761,7 +764,8 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
 
     var len = S.tab === 'd' ? S.daily.length : r.weeks.length;
     var span = S.tab === 'd' ? 730 : 260;
-    chart.timeScale().setVisibleLogicalRange(prevRange || { from: Math.max(0, len - span), to: len + 3 });
+    S.resetRange = function () { chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, len - span), to: len + 3 }); };
+    if (prevRange) chart.timeScale().setVisibleLogicalRange(prevRange); else S.resetRange();
   }
 
   /* ---------- 參數 ---------- */
@@ -784,6 +788,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
       renderCharts(false);
     });
   });
+  $('btn-latest').addEventListener('click', function () { if (S.resetRange) S.resetRange(); });
   ['tg-fib', 'tg-risk', 'tg-mark'].forEach(function (id) { $(id).addEventListener('change', function () { renderCharts(true); }); });
   $('liq-form').addEventListener('input', function () { if (!S.res) return; renderLiq(); renderCharts(true); });
   $('liq-form').addEventListener('submit', function (e) { e.preventDefault(); });
