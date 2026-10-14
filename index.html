@@ -690,7 +690,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
 
     var chart = LightweightCharts.createChart(main, baseOpts());
     S.charts.push(chart);
-    var candleOpts = { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down, priceFormat: PF, priceLineVisible: false };
+    var candleOpts = { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down, priceFormat: PF, priceLineVisible: false, lastValueVisible: false };
     var candles = chart.addCandlestickSeries(candleOpts);
     // 現價虛線（不論圖拖到哪裡，都標出最新價格）
     candles.createPriceLine({ price: S.daily[S.daily.length - 1].c, color: css('--ink'), lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true, title: '現價' });
