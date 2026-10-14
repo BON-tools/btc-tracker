@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC 雙均線合約風控與傻瓜現貨視覺化戰情室</title>
+<style>
+  :root {
+    --bg-main: #0b0f19;
+    --bg-card: #151c2c;
+    --bg-input: #1e293b;
+    --border: #2a364f;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --green: #10b981;
+    --green-bg: rgba(16, 185, 129, 0.15);
+    --red: #f43f5e;
+    --red-bg: rgba(244, 63, 94, 0.15);
+    --amber: #f59e0b;
+    --amber-bg: rgba(245, 158, 11, 0.15);
+    --cyan: #06b6d4;
+    --purple: #a855f7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    padding: 20px;
+    line-height: 1.5;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+  header {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 20px; gap: 12px;
+  }
+  h1 { font-size: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .subtitle { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
+  .btn {
+    background: #2563eb; color: #fff; border: none; padding: 10px 18px;
+    border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s;
+  }
+  .btn:hover { background: #1d4ed8; }
+  .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px;
+  }
+  .card-title {
+    font-size: 1rem; font-weight: 700; margin-bottom: 14px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .metric-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .metric-val { font-size: 1.75rem; font-weight: 800; margin: 6px 0; }
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 6px;
+    font-size: 0.78rem; font-weight: 700;
+  }
+  .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid rgba(16,185,129,0.4); }
+  .badge-red { background: var(--red-bg); color: var(--red); border: 1px solid rgba(244,63,94,0.4); }
+  .badge-amber { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(245,158,11,0.4); }
+  .banner {
+    padding: 12px 16px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; margin-bottom: 14px;
+  }
+  .check-list { list-style: none; }
+  .check-list li {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 9px 0; border-bottom: 1px dashed rgba(255,255,255,0.07); font-size: 0.9rem;
+  }
+  .check-list li:last-child { border-bottom: none; }
+  .fib-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .fib-box {
+    background: var(--bg-input); border: 1px solid var(--border);
+    padding: 8px 10px; border-radius: 6px; font-size: 0.8rem;
+  }
+  .fib-box .val { font-size: 1rem; font-weight: 700; color: #fff; margin-top: 2px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  label { display: block; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; }
+  input[type="number"] {
+    width: 100%; background: var(--bg-input); border: 1px solid var(--border);
+    color: #fff; padding: 9px 12px; border-radius: 6px; font-size: 0.95rem; font-weight: 600;
+  }
+  canvas {
+    width: 100%; background: #090d16; border: 1px solid var(--border);
+    border-radius: 8px; display: block; cursor: crosshair;
+  }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.82rem; margin-bottom: 10px; color: var(--text-muted);
+  }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 4px; border-radius: 2px; display: inline-block; }
+  #tooltip {
+    position: fixed; pointer-events: none; background: rgba(15, 23, 42, 0.95);
+    border: 1px solid #475569; padding: 10px 14px; border-radius: 8px;
+    font-size: 0.8rem; color: #f8fafc; display: none; z-index: 999;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>🛡️ BTC 傻瓜現貨 & 五大原則合約視覺化戰情室</h1>
+      <div class="subtitle" id="status-line">正在連線至 Binance 公開 API 載入過去 1000 日 K 線與 300 週 K 線...</div>
+    </div>
+    <button class="btn" onclick="fetchAndRender()">🔄 立即刷新即時盤面</button>
+  </header>
+
+  <!-- 頂部 4 大指標卡 -->
+  <div class="grid-4">
+    <div class="card">
+      <div class="metric-label">BTC 即時現價 (USDT)</div>
+      <div class="metric-val" id="v-price">--</div>
+      <div id="v-price-sub" style="font-size:0.8rem; color:var(--text-muted)">--</div>
+    </div>
+    <div class="card">
+      <div class="metric-label" style="color:var(--amber)">日線 MA360 (牛熊分界線)</div>
+      <div class="metric-val" id="v-dma360" style="color:var(--amber)">--</div>
+      <div id="v-dslope">--</div>
+    </div>
+    <div class="card">
+      <div class="metric-label" style="color:var(--cyan)">週線 MA50 (大級別生命線)</div>
+      <div class="metric-val" id="v-wma50" style="color:var(--cyan)">--</div>
+      <div id="v-wslope">--</div>
+    </div>
+    <div class="card">
+      <div class="metric-label">與上方保護線乖離率</div>
+      <div class="metric-val" id="v-dist">--</div>
+      <div style="font-size:0.78rem; color:var(--text-muted)">理想回踩開多區：<b>0% ~ +4.5%</b></div>
+    </div>
+  </div>
+
+  <!-- 雙欄：五大原則檢核 + 逃頂與斐波那契 -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">
+        <span>📋 現貨傻瓜法 & 合約開倉五大原則</span>
+        <span style="font-size:0.75rem; color:var(--text-muted)">自動燈號判定</span>
+      </div>
+      <div id="spot-banner" class="banner">--</div>
+      <ul class="check-list">
+        <li>
+          <span>1️⃣ 價格突破日線 MA360 + 突破週線 MA50</span>
+          <span id="c-break">--</span>
+        </li>
+        <li>
+          <span>2️⃣ 突破後站穩一陣子 (連 14 日收盤於雙線之上)</span>
+          <span id="c-stood">--</span>
+        </li>
+        <li>
+          <span>3️⃣ 兩條均線皆確定上揚 (保護線成型/加倉許可)</span>
+          <span id="c-slope">--</span>
+        </li>
+        <li>
+          <span>4️⃣ 價格回撤靠近週 MA50 或日 MA360 (0~4.5%)</span>
+          <span id="c-pullback">--</span>
+        </li>
+        <li>
+          <span style="color:#fda4af; font-weight:600">🎯 原則 3 建議止損位 (上揚雙均線下方再遠 5%)</span>
+          <span id="c-sl" style="font-weight:800; color:var(--red); font-size:1.05rem">--</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>🚨 原則 5 出場逃頂 & 莊家換位思考 (Fibonacci)</span>
+        <span style="font-size:0.75rem; color:var(--text-muted)">防獵殺監控</span>
+      </div>
+      <ul class="check-list" style="margin-bottom:10px">
+        <li>
+          <span>敏感指標：週線 MACD 頂背離 (波段新高但MACD未創高)</span>
+          <span id="c-div">--</span>
+        </li>
+        <li style="font-size:0.78rem; color:var(--text-muted); padding:4px 0" id="c-div-detail">--</li>
+        <li>
+          <span>延後指標：價格實質跌破週 MA50 與日 MA360</span>
+          <span id="c-exit">--</span>
+        </li>
+      </ul>
+      <div style="font-size:0.8rem; color:var(--text-muted); font-weight:600">📐 近 180 日斐波那契回撤 (莊家常洗盤獵殺位置)</div>
+      <div class="fib-grid" id="fib-container"></div>
+    </div>
+  </div>
+
+  <!-- 倉位與強平風控模擬器 -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">
+      <span>⚖️ 合約倉位控管 & 強平價視覺化檢核器 (會在下方 K 線圖直接畫出你的強平紅線)</span>
+    </div>
+    <div class="form-grid">
+      <div>
+        <label>你的開倉均價 (USDT)</label>
+        <input type="number" id="in-entry" value="72000" step="500" oninput="updateRiskAndChart()">
+      </div>
+      <div>
+        <label>實質槓桿倍數 (Leverage)</label>
+        <input type="number" id="in-lev" value="2.5" step="0.5" min="1" max="100" oninput="updateRiskAndChart()">
+      </div>
+      <div>
+        <label>模擬浮盈加倉價格 (0 = 不加倉)</label>
+        <input type="number" id="in-addp" value="0" step="500" oninput="updateRiskAndChart()">
+      </div>
+      <div>
+        <label>加倉倍數 (相對於原倉位大小)</label>
+        <input type="number" id="in-addr" value="0" step="0.5" min="0" max="10" oninput="updateRiskAndChart()">
+      </div>
+    </div>
+    <div id="risk-box" class="banner" style="margin-bottom:0">--</div>
+  </div>
+
+  <!-- 互動式 K 線與均線 / 週線 MACD 圖表 -->
+  <div class="card">
+    <div class="card-title">
+      <span>📊 BTC 日 K 線 + 日 MA360 + 週 MA50 + 強平防線 + 週線 MACD 背離圖 (近 360 日)</span>
+      <span style="font-size:0.78rem; color:var(--text-muted)">滑鼠移至圖表可查看每日精確數值</span>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:#10b981; height:10px"></i> 日 K 線 (漲/跌)</span>
+      <span><i class="dot" style="background:#f59e0b"></i> 日線 MA360</span>
+      <span><i class="dot" style="background:#06b6d4"></i> 週線 MA50</span>
+      <span><i class="dot" style="background:#f43f5e; border-bottom:2px dashed #f43f5e"></i> 你的預估強平價</span>
+      <span><i class="dot" style="background:#eab308"></i> 週線 MACD DIF</span>
+      <span><i class="dot" style="background:#a855f7"></i> 週線 MACD DEA</span>
+    </div>
+    <canvas id="kchart" width="1320" height="580"></canvas>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+let STATE = null;
+
+function calcSMA(arr, period) {
+  let out = new Array(arr.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < arr.length; i++) {
+    sum += arr[i];
+    if (i >= period) sum -= arr[i - period];
+    if (i >= period - 1) out[i] = sum / period;
+  }
+  return out;
+}
+
+function calcEMA(arr, span) {
+  let out = new Array(arr.length).fill(null);
+  let k = 2 / (span + 1);
+  let prev = arr[0];
+  out[0] = prev;
+  for (let i = 1; i < arr.length; i++) {
+    prev = arr[i] * k + prev * (1 - k);
+    out[i] = prev;
+  }
+  return out;
+}
+
+async function fetchKlines(interval, limit) {
+  const endpoints = [
+    `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${limit}`,
+    `https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${limit}`
+  ];
+  for (const url of endpoints) {
+    try {
+      const r = await fetch(url);
+      if (r.ok) return await r.json();
+    } catch (e) {}
+  }
+  throw new Error("無法連線至 Binance 公開數據源");
+}
+
+async function fetchAndRender() {
+  document.getElementById('status-line').innerText = '⏳ 正在向 Binance 抓取最新日線與週線數據...';
+  try {
+    const [dRaw, wRaw] = await Promise.all([
+      fetchKlines('1d', 1000),
+      fetchKlines('1w', 300)
+    ]);
+
+    const dTime = dRaw.map(r => r[0]);
+    const dOpen = dRaw.map(r => parseFloat(r[1]));
+    const dHigh = dRaw.map(r => parseFloat(r[2]));
+    const dLow  = dRaw.map(r => parseFloat(r[3]));
+    const dClose= dRaw.map(r => parseFloat(r[4]));
+    const dMa360 = calcSMA(dClose, 360);
+
+    const wTime = wRaw.map(r => r[0]);
+    const wHigh = wRaw.map(r => parseFloat(r[2]));
+    const wClose= wRaw.map(r => parseFloat(r[4]));
+    const wMa50 = calcSMA(wClose, 50);
+
+    const ema12 = calcEMA(wClose, 12);
+    const ema26 = calcEMA(wClose, 26);
+    const wDif = ema12.map((v, i) => v - ema26[i]);
+    const wDea = calcEMA(wDif, 9);
+    const wHist = wDif.map((v, i) => v - wDea[i]);
+
+    // Map weekly MA50 & MACD onto daily timeline
+    let mappedWMa50 = new Array(dTime.length).fill(null);
+    let mappedWDif  = new Array(dTime.length).fill(null);
+    let mappedWDea  = new Array(dTime.length).fill(null);
+    let mappedWHist = new Array(dTime.length).fill(null);
+
+    let wIdx = 0;
+    for (let i = 0; i < dTime.length; i++) {
+      while (wIdx + 1 < wTime.length && wTime[wIdx + 1] <= dTime[i]) {
+        wIdx++;
+      }
+      mappedWMa50[i] = wMa50[wIdx];
+      mappedWDif[i]  = wDif[wIdx];
+      mappedWDea[i]  = wDea[wIdx];
+      mappedWHist[i] = wHist[wIdx];
+    }
+
+    const nD = dClose.length - 1;
+    const nW = wClose.length - 1;
+
+    STATE = {
+      currPrice: dClose[nD],
+      currDMa360: dMa360[nD],
+      currWMa50: wMa50[nW],
+      dSlopeUp: dMa360[nD] > dMa360[nD - 5],
+      wSlopeUp: wMa50[nW] > wMa50[nW - 3],
+      dTime, dOpen, dHigh, dLow, dClose, dMa360,
+      mappedWMa50, mappedWDif, mappedWDea, mappedWHist,
+      wHigh, wDif,
+      liqPrice: 0,
+      newAvgEntry: 0
+    };
+
+    document.getElementById('status-line').innerText =
+      `✅ 已同步 Binance BTCUSDT 最新數據｜最後更新時間：${new Date().toLocaleTimeString()}`;
+
+    updateMetrics();
+    updateRiskAndChart();
+  } catch (err) {
+    document.getElementById('status-line').innerText = '❌ 數據讀取失敗：' + err.message;
+  }
+}
+
+function fmtUSD(v) {
+  if (v === null || isNaN(v)) return '--';
+  return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function updateMetrics() {
+  const s = STATE;
+  const upperMa = Math.max(s.currDMa360, s.currWMa50);
+  const lowerMa = Math.min(s.currDMa360, s.currWMa50);
+  const distPct = ((s.currPrice - upperMa) / upperMa) * 100;
+
+  document.getElementById('v-price').innerText = '$' + s.currPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById('v-price-sub').innerText = `較低保護線: ${fmtUSD(lowerMa)} ｜ 較高保護線: ${fmtUSD(upperMa)}`;
+  document.getElementById('v-dma360').innerText = fmtUSD(s.currDMa360);
+  document.getElementById('v-dslope').innerHTML = s.dSlopeUp
+    ? '<span class="badge badge-green">📈 確定上揚 (大於5日前)</span>'
+    : '<span class="badge badge-red">📉 走平或下彎</span>';
+
+  document.getElementById('v-wma50').innerText = fmtUSD(s.currWMa50);
+  document.getElementById('v-wslope').innerHTML = s.wSlopeUp
+    ? '<span class="badge badge-green">📈 確定上揚 (大於3週前)</span>'
+    : '<span class="badge badge-red">📉 走平或下彎</span>';
+
+  document.getElementById('v-dist').innerText = (distPct >= 0 ? '+' : '') + distPct.toFixed(2) + '%';
+
+  const aboveBoth = s.currPrice > s.currDMa360 && s.currPrice > s.currWMa50;
+  const belowBoth = s.currPrice < s.currDMa360 && s.currPrice < s.currWMa50;
+
+  let stood14 = true;
+  for (let i = s.dClose.length - 14; i < s.dClose.length; i++) {
+    if (s.dClose[i] <= s.currDMa360 || s.dClose[i] <= s.currWMa50) stood14 = false;
+  }
+  const bothUp = s.dSlopeUp && s.wSlopeUp;
+  const inPullback = aboveBoth && distPct >= 0 && distPct <= 4.5;
+
+  const sb = document.getElementById('spot-banner');
+  if (aboveBoth) {
+    sb.className = 'banner badge-green';
+    sb.innerText = '🟢 【現貨傻瓜法：買進 / 續抱牛市】價格同時突破日線 MA360 與週線 MA50';
+  } else if (belowBoth) {
+    sb.className = 'banner badge-red';
+    sb.innerText = '🔴 【現貨傻瓜法：賣出 / 空倉避險】價格同時跌破日線 MA360 與週線 MA50';
+  } else {
+    sb.className = 'banner badge-amber';
+    sb.innerText = '🟡 【現貨傻瓜法：夾縫震盪區】價格卡在日線 MA360 與週線 MA50 之間，等待雙線突破';
+  }
+
+  document.getElementById('c-break').innerHTML = aboveBoth
+    ? '<span class="badge badge-green">✅ 已突破雙均線</span>'
+    : '<span class="badge badge-red">❌ 未同時站上</span>';
+  document.getElementById('c-stood').innerHTML = stood14
+    ? '<span class="badge badge-green">✅ 連站 14 日</span>'
+    : '<span class="badge badge-amber">⏳ 尚未滿 14 日</span>';
+  document.getElementById('c-slope').innerHTML = bothUp
+    ? '<span class="badge badge-green">✅ 雙線上揚 (有保護線)</span>'
+    : '<span class="badge badge-red">🛑 未同步上揚 (禁浮盈加倉)</span>';
+  document.getElementById('c-pullback').innerHTML = (aboveBoth && bothUp && inPullback)
+    ? '<span class="badge badge-green">🎯 觸發回撤買點！</span>'
+    : `<span class="badge badge-amber">乖離 ${distPct.toFixed(1)}%</span>`;
+  document.getElementById('c-sl').innerText = fmtUSD(lowerMa * 0.95);
+
+  // Weekly MACD divergence
+  const nW = s.wHigh.length;
+  let pastH = -Infinity, pastIdx = -1;
+  for (let i = nW - 52; i < nW - 8; i++) {
+    if (s.wHigh[i] > pastH) { pastH = s.wHigh[i]; pastIdx = i; }
+  }
+  let currH = -Infinity, currIdx = -1;
+  for (let i = nW - 8; i < nW; i++) {
+    if (s.wHigh[i] > currH) { currH = s.wHigh[i]; currIdx = i; }
+  }
+  const pastDif = s.wDif[pastIdx];
+  const currDif = s.wDif[currIdx];
+  const isDiv = (currH > pastH) && (currDif < pastDif) && (currDif > 0);
+
+  document.getElementById('c-div').innerHTML = isDiv
+    ? '<span class="badge badge-red">⚠️ 週線頂背離警報！</span>'
+    : '<span class="badge badge-green">✅ 無頂背離</span>';
+  document.getElementById('c-div-detail').innerText =
+    `前波高點 ${fmtUSD(pastH)} (週DIF: ${pastDif.toFixed(0)}) vs 近8週高點 ${fmtUSD(currH)} (週DIF: ${currDif.toFixed(0)})`;
+  document.getElementById('c-exit').innerHTML = belowBoth
+    ? '<span class="badge badge-red">🔴 跌破雙均線！立刻出場</span>'
+    : '<span class="badge badge-green">🟢 未跌破雙線</span>';
+
+  // Fibonacci 180d
+  const h180 = Math.max(...s.dHigh.slice(-180));
+  const l180 = Math.min(...s.dLow.slice(-180));
+  const diff = h180 - l180;
+  const fibs = [
+    ['波段高點 (0.0)', h180],
+    ['Fib 0.382', h180 - 0.382 * diff],
+    ['Fib 0.500', h180 - 0.500 * diff],
+    ['Fib 0.618 (獵殺區)', h180 - 0.618 * diff],
+    ['Fib 0.786', h180 - 0.786 * diff],
+    ['波段低點 (1.0)', l180]
+  ];
+  document.getElementById('fib-container').innerHTML = fibs.map(([k, v]) => `
+    <div class="fib-box">
+      <div style="color:var(--text-muted)">${k}</div>
+      <div class="val">${fmtUSD(v)}</div>
+    </div>
+  `).join('');
+}
+
+function updateRiskAndChart() {
+  if (!STATE) return;
+  const entry = parseFloat(document.getElementById('in-entry').value) || 0;
+  const lev   = parseFloat(document.getElementById('in-lev').value) || 1;
+  const addP  = parseFloat(document.getElementById('in-addp').value) || 0;
+  const addR  = parseFloat(document.getElementById('in-addr').value) || 0;
+
+  const mmr = 0.005;
+  const newAvg = (addP > 0 && addR > 0) ? (entry + addP * addR) / (1 + addR) : entry;
+  const liq = newAvg * (1 - (1 / lev) + mmr);
+
+  STATE.newAvgEntry = newAvg;
+  STATE.liqPrice = liq;
+
+  const lowerMa = Math.min(STATE.currDMa360, STATE.currWMa50);
+  const safeLine = lowerMa * 0.95;
+  const bothUp = STATE.dSlopeUp && STATE.wSlopeUp;
+
+  const rb = document.getElementById('risk-box');
+  const summary = `持倉均價：${fmtUSD(newAvg)} ｜ 預估強平價：${fmtUSD(liq)} ｜ 雙均線下方安全防線：${fmtUSD(safeLine)} — `;
+
+  if (addR > 0 && !bothUp) {
+    rb.className = 'banner badge-red';
+    rb.innerText = summary + '🛑 【違反原則2】雙均線未同步上揚前嚴禁浮盈加倉！倉體變大只要回落原處必被強平！';
+  } else if (liq >= lowerMa) {
+    rb.className = 'banner badge-red';
+    rb.innerText = summary + '💀 【致命強平風險】強平價高於保護均線！莊家回踩均線測試支撐時你會直接爆倉！';
+  } else if (liq >= safeLine) {
+    rb.className = 'banner badge-amber';
+    rb.innerText = summary + '⚠️ 【插針警告】強平價雖低於均線，但距離均線不足 5%，小心莊家向下插針獵殺！';
+  } else {
+    rb.className = 'banner badge-green';
+    rb.innerText = summary + '🛡️ 【安全過關】強平價遠在日線 MA360 與週線 MA50 之下，具備抗洗盤保護力。';
+  }
+
+  drawCanvasChart();
+}
+
+function drawCanvasChart(hoverIndex = null) {
+  const canvas = document.getElementById('kchart');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const N = 360; // 繪製最近 360 天
+  const s = STATE;
+  const startIdx = s.dClose.length - N;
+
+  const padL = 65, padR = 75, padT = 20, padB = 30;
+  const priceH = 360;
+  const macdTop = padT + priceH + 30;
+  const macdH = H - macdTop - padB;
+  const plotW = W - padL - padR;
+
+  // 計算價格區間最大最小值 (納入均線與強平價)
+  let minP = Infinity, maxP = -Infinity;
+  let minM = Infinity, maxM = -Infinity;
+
+  for (let i = startIdx; i < s.dClose.length; i++) {
+    if (s.dLow[i] < minP) minP = s.dLow[i];
+    if (s.dHigh[i] > maxP) maxP = s.dHigh[i];
+    if (s.dMa360[i] !== null) {
+      if (s.dMa360[i] < minP) minP = s.dMa360[i];
+      if (s.dMa360[i] > maxP) maxP = s.dMa360[i];
+    }
+    if (s.mappedWMa50[i] !== null) {
+      if (s.mappedWMa50[i] < minP) minP = s.mappedWMa50[i];
+      if (s.mappedWMa50[i] > maxP) maxP = s.mappedWMa50[i];
+    }
+    if (s.mappedWDif[i] !== null) {
+      minM = Math.min(minM, s.mappedWDif[i], s.mappedWDea[i], s.mappedWHist[i]);
+      maxM = Math.max(maxM, s.mappedWDif[i], s.mappedWDea[i], s.mappedWHist[i]);
+    }
+  }
+  if (s.liqPrice > minP * 0.5 && s.liqPrice < maxP * 1.2) {
+    minP = Math.min(minP, s.liqPrice * 0.96);
+    maxP = Math.max(maxP, s.liqPrice * 1.02);
+  }
+  const padP = (maxP - minP) * 0.06;
+  minP -= padP; maxP += padP;
+
+  const yPrice = (p) => padT + priceH - ((p - minP) / (maxP - minP)) * priceH;
+  const yMacd  = (m) => macdTop + macdH - ((m - minM) / (maxM - minM || 1)) * macdH;
+  const xPos   = (idx) => padL + ((idx + 0.5) / N) * plotW;
+
+  // 繪製背景網格線
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#64748b';
+  ctx.font = '11px sans-serif';
+
+  for (let g = 0; g <= 5; g++) {
+    let val = minP + (maxP - minP) * (g / 5);
+    let y = yPrice(val);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText('$' + Math.round(val).toLocaleString(), W - padR + 6, y + 4);
+  }
+
+  // MACD 0 軸線
+  if (minM < 0 && maxM > 0) {
+    let y0 = yMacd(0);
+    ctx.strokeStyle = '#334155';
+    ctx.beginPath(); ctx.moveTo(padL, y0); ctx.lineTo(W - padR, y0); ctx.stroke();
+  }
+
+  // 繪製日 K 線與週 MACD 柱
+  const barW = Math.max(1.5, (plotW / N) * 0.65);
+  const yZero = yMacd(0);
+
+  for (let k = 0; k < N; k++) {
+    const i = startIdx + k;
+    const x = xPos(k);
+    const isUp = s.dClose[i] >= s.dOpen[i];
+
+    // K線影線
+    ctx.strokeStyle = isUp ? '#10b981' : '#f43f5e';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, yPrice(s.dHigh[i]));
+    ctx.lineTo(x, yPrice(s.dLow[i]));
+    ctx.stroke();
+
+    // K線實體
+    const topY = yPrice(Math.max(s.dOpen[i], s.dClose[i]));
+    const botY = yPrice(Math.min(s.dOpen[i], s.dClose[i]));
+    ctx.fillStyle = isUp ? '#10b981' : '#f43f5e';
+    ctx.fillRect(x - barW / 2, topY, barW, Math.max(1.5, botY - topY));
+
+    // 週 MACD Hist
+    const hVal = s.mappedWHist[i];
+    if (hVal !== null) {
+      const hy = yMacd(hVal);
+      ctx.fillStyle = hVal >= 0 ? 'rgba(16, 185, 129, 0.55)' : 'rgba(244, 63, 94, 0.55)';
+      ctx.fillRect(x - barW / 2, Math.min(yZero, hy), barW, Math.abs(hy - yZero));
+    }
+  }
+
+  // 繪製均線輔助函式
+  function drawLine(arr, yFn, color, width) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    let started = false;
+    for (let k = 0; k < N; k++) {
+      const v = arr[startIdx + k];
+      if (v === null) continue;
+      const x = xPos(k), y = yFn(v);
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  drawLine(s.dMa360, yPrice, '#f59e0b', 2.2);
+  drawLine(s.mappedWMa50, yPrice, '#06b6d4', 2.2);
+  drawLine(s.mappedWDif, yMacd, '#eab308', 1.8);
+  drawLine(s.mappedWDea, yMacd, '#a855f7', 1.8);
+
+  // 繪製強平價紅虛線
+  if (s.liqPrice >= minP && s.liqPrice <= maxP) {
+    const ly = yPrice(s.liqPrice);
+    ctx.save();
+    ctx.strokeStyle = '#f43f5e';
+    ctx.lineWidth = 1.8;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(padL, ly); ctx.lineTo(W - padR, ly); ctx.stroke();
+    ctx.fillStyle = '#f43f5e';
+    ctx.fillText(`強平價 ${fmtUSD(s.liqPrice)}`, padL + 8, ly - 6);
+    ctx.restore();
+  }
+
+  // 繪製 X 軸日期標籤
+  ctx.fillStyle = '#94a3b8';
+  for (let k = 0; k < N; k += 60) {
+    const d = new Date(s.dTime[startIdx + k]);
+    const label = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    ctx.fillText(label, xPos(k) - 28, H - 8);
+  }
+
+  // 繪製十字準星
+  if (hoverIndex !== null && hoverIndex >= 0 && hoverIndex < N) {
+    const hx = xPos(hoverIndex);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(hx, padT); ctx.lineTo(hx, H - padB); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// 綁定滑鼠互動事件
+const canvasEl = document.getElementById('kchart');
+const tooltipEl = document.getElementById('tooltip');
+
+canvasEl.addEventListener('mousemove', (e) => {
+  if (!STATE) return;
+  const rect = canvasEl.getBoundingClientRect();
+  const scaleX = canvasEl.width / rect.width;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const padL = 65, padR = 75, N = 360;
+  const plotW = canvasEl.width - padL - padR;
+
+  const k = Math.floor(((mx - padL) / plotW) * N);
+  if (k < 0 || k >= N) {
+    tooltipEl.style.display = 'none';
+    drawCanvasChart(null);
+    return;
+  }
+  drawCanvasChart(k);
+  const idx = STATE.dClose.length - N + k;
+  const dt = new Date(STATE.dTime[idx]).toISOString().slice(0, 10);
+  tooltipEl.style.display = 'block';
+  tooltipEl.style.left = (e.clientX + 16) + 'px';
+  tooltipEl.style.top = (e.clientY - 20) + 'px';
+  tooltipEl.innerHTML = `
+    <div style="font-weight:700; margin-bottom:4px; color:#38bdf8">📅 ${dt}</div>
+    <div>收盤價：<b>${fmtUSD(STATE.dClose[idx])}</b></div>
+    <div style="color:#f59e0b">日線 MA360：<b>${fmtUSD(STATE.dMa360[idx])}</b></div>
+    <div style="color:#06b6d4">週線 MA50：<b>${fmtUSD(STATE.mappedWMa50[idx])}</b></div>
+    <div style="color:#eab308">週 MACD DIF：<b>${STATE.mappedWDif[idx]?.toFixed(1)}</b></div>
+    <div style="color:#a855f7">週 MACD DEA：<b>${STATE.mappedWDea[idx]?.toFixed(1)}</b></div>
+  `;
+});
+
+canvasEl.addEventListener('mouseleave', () => {
+  tooltipEl.style.display = 'none';
+  if (STATE) drawCanvasChart(null);
+});
+
+fetchAndRender();
+</script>
+</body>
+</html>
