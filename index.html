@@ -23,6 +23,7 @@
   --down: #c3352c;
   --warn: #a86b00;
   --grid: #eceef2;
+  --fib: #8a3ffc;
   --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --r: 10px;
@@ -31,13 +32,13 @@
   :root:not([data-theme="light"]) {
     --bg: #0e1115; --surface: #161a20; --sunk: #1c2128; --ink: #e7eaef; --muted: #9aa3b1;
     --line: #2a313b; --accent: #f0a23b; --wline: #6ea2ff; --up: #3ec488; --down: #f2675f;
-    --warn: #e9b44c; --grid: #1f252d; color-scheme: dark;
+    --warn: #e9b44c; --grid: #1f252d; --fib: #c39bff; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0e1115; --surface: #161a20; --sunk: #1c2128; --ink: #e7eaef; --muted: #9aa3b1;
   --line: #2a313b; --accent: #f0a23b; --wline: #6ea2ff; --up: #3ec488; --down: #f2675f;
-  --warn: #e9b44c; --grid: #1f252d; color-scheme: dark;
+  --warn: #e9b44c; --grid: #1f252d; --fib: #c39bff; color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -751,9 +752,11 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
 
     if (showFib && r.fib) {
       r.fib.levels.forEach(function (l) {
-        candles.createPriceLine({ price: l.price, color: css('--muted'), lineWidth: 1, lineStyle: LS.Dotted, axisLabelVisible: false, title: 'Fib ' + l.ratio });
+        // 0.382 / 0.5 / 0.618 是最常用的回撤位，畫粗一點
+        var key = l.ratio === 0.382 || l.ratio === 0.5 || l.ratio === 0.618;
+        candles.createPriceLine({ price: l.price, color: css('--fib'), lineWidth: key ? 2 : 1, lineStyle: key ? LS.Dashed : LS.Dotted, axisLabelVisible: true, title: String(l.ratio) });
       });
-      legend.push('<span class="mk">⋯ 斐波那契</span>');
+      legend.push('<span class="mk" style="color:var(--fib)">- - 斐波那契（粗線 = 0.382 / 0.5 / 0.618）</span>');
     }
     if (showRisk) {
       if (r.stop && r.last && r.last.aboveBoth) candles.createPriceLine({ price: r.stop, color: down, lineWidth: 1, lineStyle: LS.Dashed, axisLabelVisible: true, title: '止損' });
