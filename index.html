@@ -75,6 +75,7 @@ header.top { display: grid; gap: 10px; }
   padding: 6px 12px; font-size: 13px;
 }
 .btn:hover { border-color: var(--muted); }
+.btn[aria-pressed="true"] { background: var(--fib); border-color: var(--fib); color: var(--surface); }
 .btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 .banner {
   border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
@@ -240,7 +241,10 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
       <label><input type="checkbox" id="tg-risk" checked> 止損 / 強平線</label>
       <label><input type="checkbox" id="tg-mark" checked> 訊號標記</label>
       <button class="btn" type="button" id="btn-latest">回到最新</button>
+      <button class="btn" type="button" id="btn-fib-draw" aria-pressed="false">畫斐波那契</button>
+      <button class="btn" type="button" id="btn-fib-auto" hidden>改回自動</button>
     </div>
+    <div class="banner" id="draw-hint" hidden></div>
     <div class="legend" id="legend"></div>
     <div class="chart" id="chart-main"></div>
     <div class="chart macd" id="chart-macd" hidden></div>
@@ -353,11 +357,15 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
   var S = {
     daily: null, source: '', mode: '', updated: null,
     res: null, chips: null, params: loadParams(),
-    tab: 'd', fibSpan: 156, charts: [], liq: null
+    tab: 'd', fibSpan: 156, charts: [], liq: null,
+    manualFib: loadManualFib(), draw: false, drawP1: null
   };
 
   /* ---------- 小工具 ---------- */
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function loadManualFib() {
+    try { var m = JSON.parse(store('btc-fib-manual') || 'null'); return m && isFinite(m.p1) && isFinite(m.p2) ? m : null; } catch (e) { return null; }
+  }
   function loadParams() {
     var p = {};
     try { p = JSON.parse(store('btc-params') || '{}') || {}; } catch (e) { p = {}; }
@@ -581,12 +589,37 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
   }
 
   /* ---------- 斐波那契 ---------- */
+  // 手動畫的斐波那契：0 在終點、1 在起點（同 TradingView）
+  var FIB_RATIOS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+  function manualFib(m) {
+    var d = m.p1 - m.p2, up = m.p2 > m.p1;
+    return {
+      manual: true, up: up, m: m,
+      high: Math.max(m.p1, m.p2), low: Math.min(m.p1, m.p2),
+      highT: up ? m.t2 : m.t1, lowT: up ? m.t1 : m.t2, startT: Math.min(m.t1, m.t2),
+      levels: FIB_RATIOS.map(function (r) { return { ratio: r, price: m.p2 + d * r }; }),
+      ext: [1.272, 1.618].map(function (r) { return { ratio: r, price: m.p1 - d * r, ext: true }; })
+    };
+  }
+  function getFib() { return S.manualFib ? manualFib(S.manualFib) : S.res.fib; }
+
+  function updateDrawUI() {
+    var b = $('btn-fib-draw'), h = $('draw-hint');
+    b.setAttribute('aria-pressed', S.draw ? 'true' : 'false');
+    b.textContent = S.draw ? '取消畫線' : '畫斐波那契';
+    $('btn-fib-auto').hidden = !S.manualFib || S.draw;
+    h.hidden = !S.draw;
+    if (S.draw) h.textContent = S.drawP1
+      ? '第 2 步：點「終點」（波段的另一端）。已選起點 ' + fUsd(S.drawP1.p) + '。'
+      : '第 1 步：在圖上點「起點」。量上漲波段就點低點，量下跌波段就點高點；會自動吸附到那根 K 線的最高或最低價。';
+  }
+
   function renderFib() {
-    var f = S.res.fib; if (!f) return;
+    var f = getFib(); if (!f) return;
     var price = S.daily[S.daily.length - 1].c;
     var all = f.levels.concat(f.ext).sort(function (a, b) { return b.price - a.price; });
     var nearest = all.reduce(function (best, l) { return Math.abs(l.price - price) < Math.abs(best.price - price) ? l : best; }, all[0]);
-    $('fib-note').textContent = (f.up ? '上漲波段' : '下跌波段') + '：低點 ' + fUsd(f.low) + '（' + fDate(f.lowT) + '）→ 高點 ' + fUsd(f.high) + '（' + fDate(f.highT) + '）';
+    $('fib-note').textContent = (f.manual ? '手動畫線・' : '自動・') + (f.up ? '上漲波段' : '下跌波段') + '：低點 ' + fUsd(f.low) + '（' + fDate(f.lowT) + '）→ 高點 ' + fUsd(f.high) + '（' + fDate(f.highT) + '）';
     $('fib-table').innerHTML = '<thead><tr><th>比例</th><th class="r">價格</th><th class="r">距現價</th></tr></thead><tbody>' +
       all.map(function (l) {
         return '<tr' + (l === nearest ? ' class="hl"' : '') + '><td class="num">' + l.ratio.toFixed(3) + (l.ext ? ' <span class="muted small">延伸</span>' : '') + '</td><td class="r num">' + fUsd(l.price) + '</td><td class="r num ' + cls((l.price / price - 1) * 100) + '">' + fPct((l.price / price - 1) * 100) + '</td></tr>';
@@ -688,7 +721,8 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
   }
   function fibBands(fib, chart, series) {
     var lv = fib.levels.slice().sort(function (a, b) { return a.ratio - b.ratio; });
-    var startT = ts(Math.min(fib.lowT, fib.highT));
+    function tt(t) { return ts(S.tab === 'w' ? L.weekStart(t) : t); }
+    var startT = tt(fib.startT != null ? fib.startT : Math.min(fib.lowT, fib.highT));
     var labelColor = css('--ink');
     var renderer = {
       draw: function (target) {
@@ -723,6 +757,19 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
         target.useMediaCoordinateSpace(function (sc) {
           var ctx = sc.context, x0 = renderer.x0, ys = renderer.ys;
           if (x0 == null || !ys) return;
+          // 手動畫線：連起點與終點的虛線，像 TradingView 一樣
+          if (fib.manual) {
+            var ax = chart.timeScale().timeToCoordinate(tt(fib.m.t1)), bx = chart.timeScale().timeToCoordinate(tt(fib.m.t2));
+            var ay = series.priceToCoordinate(fib.m.p1), by = series.priceToCoordinate(fib.m.p2);
+            if (ax != null && bx != null && ay != null && by != null) {
+              ctx.save();
+              ctx.strokeStyle = labelColor; ctx.globalAlpha = 0.7; ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+              ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+              ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.fillStyle = labelColor;
+              [[ax, ay], [bx, by]].forEach(function (pt) { ctx.beginPath(); ctx.arc(pt[0], pt[1], 3.5, 0, Math.PI * 2); ctx.fill(); });
+              ctx.restore();
+            }
+          }
           ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace';
           ctx.textBaseline = 'bottom';
           lv.forEach(function (l, i) {
@@ -816,10 +863,31 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
       link(chart, mc); link(mc, chart);
     }
 
-    if (showFib && r.fib) {
-      candles.attachPrimitive(fibBands(r.fib, chart, candles));
-      legend.push('<span class="mk"><span class="fibkey"></span>斐波那契色帶（綠色 0.5～0.618 = 黃金回撤區）</span>');
+    var fibNow = getFib();
+    if (showFib && fibNow) {
+      candles.attachPrimitive(fibBands(fibNow, chart, candles));
+      legend.push('<span class="mk"><span class="fibkey"></span>斐波那契' + (fibNow.manual ? '（手動）' : '（自動）') + '：綠色 0.5～0.618 = 黃金回撤區</span>');
     }
+    if (S.drawP1) {
+      candles.createPriceLine({ price: S.drawP1.p, color: css('--fib'), lineWidth: 1, lineStyle: LS.Dashed, axisLabelVisible: true, title: '起點' });
+    }
+    chart.subscribeClick(function (param) {
+      if (!S.draw || !param.point || param.time == null) return;
+      var price = candles.coordinateToPrice(param.point.y);
+      var bar = param.seriesData && param.seriesData.get(candles);
+      if (bar && bar.high != null) price = Math.abs(price - bar.high) < Math.abs(price - bar.low) ? bar.high : bar.low;
+      if (price == null || !isFinite(price)) return;
+      var t = param.time * 1000;
+      if (!S.drawP1) { S.drawP1 = { t: t, p: price }; }
+      else {
+        S.manualFib = { t1: S.drawP1.t, p1: S.drawP1.p, t2: t, p2: price };
+        S.drawP1 = null; S.draw = false;
+        store('btc-fib-manual', JSON.stringify(S.manualFib));
+        renderFib();
+      }
+      updateDrawUI();
+      renderCharts(true);
+    });
     if (showRisk) {
       if (r.stop && r.last && r.last.aboveBoth) candles.createPriceLine({ price: r.stop, color: down, lineWidth: 1, lineStyle: LS.Dashed, axisLabelVisible: true, title: '止損' });
       if (S.liq) candles.createPriceLine({ price: S.liq, color: warn, lineWidth: 1, lineStyle: LS.Dashed, axisLabelVisible: true, title: '強平' });
@@ -854,11 +922,20 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
     });
   });
   $('btn-latest').addEventListener('click', function () { if (S.resetRange) S.resetRange(); });
+  $('btn-fib-draw').addEventListener('click', function () {
+    S.draw = !S.draw; S.drawP1 = null;
+    if (S.draw) $('tg-fib').checked = true;
+    updateDrawUI(); if (S.res) renderCharts(true);
+  });
+  $('btn-fib-auto').addEventListener('click', function () {
+    S.manualFib = null; store('btc-fib-manual', 'null');
+    updateDrawUI(); if (S.res) { renderFib(); renderCharts(true); }
+  });
   ['tg-fib', 'tg-risk', 'tg-mark'].forEach(function (id) { $(id).addEventListener('change', function () { renderCharts(true); }); });
   $('liq-form').addEventListener('input', function () { if (!S.res) return; renderLiq(); renderCharts(true); });
   $('liq-form').addEventListener('submit', function (e) { e.preventDefault(); });
   $('param-form').addEventListener('submit', function (e) { e.preventDefault(); });
-  $('fib-span').addEventListener('change', function () { S.fibSpan = +this.value; if (!S.res) return; recompute(); renderFib(); renderCharts(true); });
+  $('fib-span').addEventListener('change', function () { S.fibSpan = +this.value; S.manualFib = null; store('btc-fib-manual', 'null'); updateDrawUI(); if (!S.res) return; recompute(); renderFib(); renderCharts(true); });
   $('p-apply').addEventListener('click', function () {
     var p = {};
     PARAM_KEYS.forEach(function (k) { var v = parseFloat($('p-' + k).value); if (isFinite(v)) p[k] = v; });
@@ -883,6 +960,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
   var savedTab = store('btc-tab');
   if (savedTab === 'w') { S.tab = 'w'; $('tab-d').setAttribute('aria-pressed', 'false'); $('tab-w').setAttribute('aria-pressed', 'true'); }
 
+  updateDrawUI();
   load();
   setInterval(refreshLatest, 60000);
 })();
