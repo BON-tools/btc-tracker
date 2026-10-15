@@ -152,7 +152,8 @@ tr.hl td { background: color-mix(in srgb, var(--wline) 9%, transparent); }
 .legend { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
 .sw { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
-.mk { font-size: 11px; }
+.mk { font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
+.fibkey { width: 16px; height: 10px; border-radius: 2px; background: linear-gradient(#ef535055, #ff980055, #a8b82055, #26a69a88, #29b6f655, #9575cd55); }
 
 /* 表單 */
 .form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -679,6 +680,71 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
   function ts(t) { return Math.floor(t / 1000); }
   function lineData(times, vals) { return times.map(function (t, i) { return vals[i] == null ? { time: t } : { time: t, value: vals[i] }; }); }
 
+  /* ---------- 斐波那契色帶（仿 TradingView：從波段起點往右畫，每一段一個顏色） ---------- */
+  var FIB_COLORS = { 0: '#9aa3b1', 0.236: '#ef5350', 0.382: '#ff9800', 0.5: '#a8b820', 0.618: '#26a69a', 0.786: '#29b6f6', 1: '#9575cd' };
+  function hexA(hex, a) {
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  function fibBands(fib, chart, series) {
+    var lv = fib.levels.slice().sort(function (a, b) { return a.ratio - b.ratio; });
+    var startT = ts(Math.min(fib.lowT, fib.highT));
+    var labelColor = css('--ink');
+    var renderer = {
+      draw: function (target) {
+        target.useMediaCoordinateSpace(function (sc) {
+          var ctx = sc.context, W = sc.mediaSize.width;
+          var x0 = chart.timeScale().timeToCoordinate(startT);
+          if (x0 == null || x0 < 0) x0 = 0;
+          if (x0 >= W) return;
+          var ys = lv.map(function (l) { return series.priceToCoordinate(l.price); });
+          // 色帶：每兩條相鄰比例之間塗一層淡色；0.5～0.618 黃金區加深
+          for (var i = 0; i < lv.length - 1; i++) {
+            if (ys[i] == null || ys[i + 1] == null) continue;
+            var golden = lv[i].ratio === 0.5;
+            ctx.fillStyle = hexA(FIB_COLORS[lv[i + 1].ratio], golden ? 0.2 : 0.09);
+            ctx.fillRect(x0, Math.min(ys[i], ys[i + 1]), W - x0, Math.abs(ys[i + 1] - ys[i]));
+          }
+          lv.forEach(function (l, i) {
+            var y = ys[i];
+            if (y == null) return;
+            var key = l.ratio === 0.382 || l.ratio === 0.5 || l.ratio === 0.618;
+            ctx.strokeStyle = hexA(FIB_COLORS[l.ratio], 0.9);
+            ctx.lineWidth = key ? 1.5 : 1;
+            ctx.beginPath(); ctx.moveTo(x0, Math.round(y) + 0.5); ctx.lineTo(W, Math.round(y) + 0.5); ctx.stroke();
+          });
+          renderer.x0 = x0; renderer.ys = ys;
+        });
+      }
+    };
+    // 標籤畫在 K 線上層，底色不透明，不會被 K 線蓋住
+    var labels = {
+      draw: function (target) {
+        target.useMediaCoordinateSpace(function (sc) {
+          var ctx = sc.context, x0 = renderer.x0, ys = renderer.ys;
+          if (x0 == null || !ys) return;
+          ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace';
+          ctx.textBaseline = 'bottom';
+          lv.forEach(function (l, i) {
+            var y = ys[i];
+            if (y == null) return;
+            var txt = l.ratio + '  ' + Math.round(l.price).toLocaleString('en-US');
+            var tw = ctx.measureText(txt).width;
+            ctx.fillStyle = hexA(css('--surface'), 0.94);
+            ctx.fillRect(x0 + 4, y - 16, tw + 22, 15);
+            ctx.fillStyle = FIB_COLORS[l.ratio];
+            ctx.fillRect(x0 + 8, y - 12, 8, 7);
+            ctx.fillStyle = labelColor;
+            ctx.fillText(txt, x0 + 20, y - 3);
+          });
+        });
+      }
+    };
+    var view = { zOrder: function () { return 'bottom'; }, renderer: function () { return renderer; } };
+    var labelView = { zOrder: function () { return 'top'; }, renderer: function () { return labels; } };
+    return { updateAllViews: function () {}, paneViews: function () { return [view, labelView]; } };
+  }
+
   function renderCharts(keepRange) {
     if (!S.res || typeof LightweightCharts === 'undefined') return;
     var main = $('chart-main'), macdEl = $('chart-macd');
@@ -751,12 +817,8 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
     }
 
     if (showFib && r.fib) {
-      r.fib.levels.forEach(function (l) {
-        // 0.382 / 0.5 / 0.618 是最常用的回撤位，畫粗一點
-        var key = l.ratio === 0.382 || l.ratio === 0.5 || l.ratio === 0.618;
-        candles.createPriceLine({ price: l.price, color: css('--fib'), lineWidth: key ? 2 : 1, lineStyle: key ? LS.Dashed : LS.Dotted, axisLabelVisible: true, title: String(l.ratio) });
-      });
-      legend.push('<span class="mk" style="color:var(--fib)">- - 斐波那契（粗線 = 0.382 / 0.5 / 0.618）</span>');
+      candles.attachPrimitive(fibBands(r.fib, chart, candles));
+      legend.push('<span class="mk"><span class="fibkey"></span>斐波那契色帶（綠色 0.5～0.618 = 黃金回撤區）</span>');
     }
     if (showRisk) {
       if (r.stop && r.last && r.last.aboveBoth) candles.createPriceLine({ price: r.stop, color: down, lineWidth: 1, lineStyle: LS.Dashed, axisLabelVisible: true, title: '止損' });
