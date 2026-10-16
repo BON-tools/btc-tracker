@@ -85,6 +85,39 @@ header.top { display: grid; gap: 10px; }
 .banner.err { border-color: color-mix(in srgb, var(--down) 45%, transparent); background: color-mix(in srgb, var(--down) 9%, var(--surface)); }
 
 /* 四個結論 */
+/* 主訊號燈 */
+.signal {
+  --sig: var(--muted);
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 16px; align-items: center;
+  padding: 16px 18px; border-radius: 14px;
+  border: 1.5px solid color-mix(in srgb, var(--sig) 55%, transparent);
+  background: color-mix(in srgb, var(--sig) 11%, var(--surface));
+}
+.signal[data-s="go"] { --sig: var(--up); }
+.signal[data-s="care"], .signal[data-s="warn"] { --sig: var(--warn); }
+.signal[data-s="exit"] { --sig: var(--down); }
+.signal[data-s="hold"] { --sig: var(--wline); }
+.lamp {
+  width: 54px; height: 54px; border-radius: 50%; background: var(--sig);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--sig) 22%, transparent), 0 0 22px color-mix(in srgb, var(--sig) 55%, transparent);
+  display: grid; place-items: center; color: var(--surface); font-size: 24px; font-weight: 700;
+}
+.signal[data-s="wait"] .lamp { box-shadow: 0 0 0 6px color-mix(in srgb, var(--sig) 18%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  .signal[data-s="go"] .lamp, .signal[data-s="exit"] .lamp { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--sig) 10%, transparent), 0 0 30px color-mix(in srgb, var(--sig) 65%, transparent); } }
+}
+.sig-k { font-size: 12px; color: var(--muted); letter-spacing: .06em; }
+.sig-t { font-size: clamp(22px, 6vw, 28px); font-weight: 700; color: var(--sig); line-height: 1.25; }
+.sig-d { font-size: 14px; margin-top: 2px; }
+.sig-more { grid-column: 1 / -1; display: grid; gap: 8px; }
+.sig-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.sig-row b { font-weight: 600; margin-right: 2px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 99px; font-size: 12px; border: 1px solid var(--line); background: var(--surface); }
+.chip.ok { color: var(--up); border-color: color-mix(in srgb, var(--up) 40%, transparent); }
+.chip.no { color: var(--muted); }
+.chip.bad { color: var(--down); border-color: color-mix(in srgb, var(--down) 45%, transparent); }
+.sig-legend { font-size: 11px; color: var(--muted); }
 .verdicts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (min-width: 820px) { .verdicts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .verdict {
@@ -206,6 +239,12 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
     </div>
     <div class="banner" id="banner" hidden></div>
   </header>
+
+  <section class="signal" id="signal" data-s="wait" aria-live="polite" aria-label="主訊號">
+    <div class="lamp" id="sig-lamp">…</div>
+    <div><div class="sig-k">依我的進出場原則・目前訊號</div><div class="sig-t" id="sig-t">計算中</div><div class="sig-d" id="sig-d"></div></div>
+    <div class="sig-more" id="sig-more"></div>
+  </section>
 
   <section class="verdicts" id="verdicts" aria-label="目前結論">
     <div class="verdict"><span class="k">現貨傻瓜法</span><span class="v">—</span></div>
@@ -480,6 +519,8 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
     var dSlope = dPrev ? (x.dMA / dPrev - 1) * 100 : null, wSlope = wPrev ? (x.wMA / wPrev - 1) * 100 : null;
     var lower = Math.min(x.dMA, x.wMA);
 
+    renderSignal(r, x, p);
+
     // 四個結論
     var v = [];
     v.push(x.zone === 'hold' ? ['good', '持有區', '已站上日MA360 與週MA50']
@@ -542,6 +583,67 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
 
     renderLiq(); renderFib(); renderHistory();
     S.lower = lower;
+  }
+
+  /* ---------- 主訊號燈：把進出場原則濃縮成一個結論 ---------- */
+  function renderSignal(r, x, p) {
+    var c = x.conds, dv = r.divNow;
+    var lastEv = r.events.length ? r.events[r.events.length - 1] : null;
+    var fromHold = lastEv && lastEv.type === 'hold';
+    var st, icon, title, desc, rows = [];
+    var condChips = [
+      [c.aboveBoth, '站上兩線'], [c.stayed, '站穩 ' + p.daysAboveMin + ' 天'],
+      [c.dRising, '日MA360 上揚'], [c.wRising, '週MA50 上揚'], [c.near, '回撤到線附近']
+    ].map(function (q) { return '<span class="chip ' + (q[0] ? 'ok' : 'no') + '">' + (q[0] ? '✓' : '○') + ' ' + q[1] + '</span>'; }).join('');
+    var exitChips =
+      '<span class="chip ' + (dv.active ? 'bad' : 'no') + '">' + (dv.active ? '!' : '–') + ' 週MACD 頂背離</span>' +
+      '<span class="chip ' + (x.belowBoth ? 'bad' : !x.aboveBoth ? 'bad' : 'no') + '">' + (x.belowBoth ? '!' : !x.aboveBoth ? '½' : '–') + ' 跌破兩線</span>';
+
+    var daysSinceBreak = lastEv && lastEv.type === 'out' ? Math.round((x.t - lastEv.t) / 86400000) : null;
+    // 剛跌破（還沒連續 3 天確認，或跌破後 14 天內）＝紅燈；之後轉灰燈觀望
+    var freshBreak = x.belowBoth && (daysSinceBreak == null || daysSinceBreak <= 14);
+    if (freshBreak) {
+      st = 'exit'; icon = '!'; title = '出場訊號';
+      desc = (daysSinceBreak == null ? '剛跌破' : fDate(lastEv.t) + ' 跌破') + '日MA360 與週MA50（延後出場指標）。現貨傻瓜法：賣出；合約多單：出場。等重新站上兩線再說。';
+    } else if (dv.active) {
+      st = 'exit'; icon = '!'; title = '注意出場';
+      desc = '週MACD 出現頂背離（敏感出場指標）：價格創新高 ' + fUsd(dv.candH) + '，MACD 卻沒跟上。依原則找合適的點出場，不要再開多。';
+    } else if (!x.aboveBoth && fromHold) {
+      st = 'warn'; icon = '!'; title = '注意：跌破一條線';
+      desc = '已跌破' + (x.aboveD ? '週MA50' : '日MA360') + '，只剩一條線撐著。若再跌破另一條就是出場訊號；多單請確認止損 ' + fUsd(r.stop) + '。';
+    } else if (x.entry && !r.divRecent) {
+      st = 'go'; icon = '✓'; title = '可以進場（開多）';
+      desc = '5 項開倉條件全部符合。止損設在 ' + fUsd(r.stop) + '，進場前先用下方「強平價檢查器」確認強平價在兩線之下。';
+    } else if (x.entry && r.divRecent) {
+      st = 'care'; icon = '!'; title = '條件符合，但要小心';
+      desc = '5 項條件都符合，但近半年出現過週MACD 頂背離（' + (r.lastDiv ? fDate(r.lastDiv.t) : '') + '）。歷史上這種位置常是高檔，進場請縮小倉位。';
+    } else if (x.aboveBoth) {
+      st = r.divRecent ? 'care' : 'hold'; icon = r.divRecent ? '!' : '◆';
+      title = r.divRecent ? '持有，但提高警覺' : '持有中・等回撤';
+      desc = (r.divRecent ? '近半年出現過週MACD 頂背離，留意出場訊號。' : '價格在兩線之上，現貨續抱。') +
+        '合約要等條件全部符合再開多，目前還差：' + failedNames(c, p).join('、') + '。';
+    } else {
+      st = 'wait'; icon = '–'; title = '空手觀望';
+      desc = (x.belowBoth && daysSinceBreak != null ? '自 ' + fDate(lastEv.t) + ' 跌破兩線後已 ' + daysSinceBreak + ' 天。' : '') + '價格' + (x.zone === 'mid' ? '夾在兩條線之間' : '在兩條線之下') + '，依原則不進場。等價格同時站上日MA360（' + fUsd(x.dMA) + '）與週MA50（' + fUsd(x.wMA) + '）。';
+    }
+
+    rows.push('<div class="sig-row"><b>進場條件</b>' + condChips + '</div>');
+    rows.push('<div class="sig-row"><b>出場訊號</b>' + exitChips + '</div>');
+    rows.push('<div class="sig-legend">綠燈＝可以進場　藍燈＝持有等回撤　黃燈＝小心　紅燈＝注意出場／出場　灰燈＝空手觀望</div>');
+
+    var el = $('signal');
+    el.setAttribute('data-s', st);
+    $('sig-lamp').textContent = icon;
+    $('sig-t').textContent = title;
+    $('sig-d').textContent = desc;
+    $('sig-more').innerHTML = rows.join('');
+    var dot = { go: '🟢', care: '🟡', warn: '🟠', exit: '🔴', hold: '🔵', wait: '⚪' }[st];
+    document.title = dot + ' ' + title + '｜BTC 雙線監控';
+  }
+
+  function failedNames(c, p) {
+    var names = { aboveBoth: '站上兩線', stayed: '站穩 ' + p.daysAboveMin + ' 天', dRising: '日MA360 上揚', wRising: '週MA50 上揚', near: '回撤到線附近' };
+    return Object.keys(names).filter(function (k) { return !c[k]; }).map(function (k) { return names[k]; });
   }
 
   function slopePill(up) { return up ? '<span class="pill good">上揚</span>' : '<span class="pill bad">下彎</span>'; }
@@ -823,6 +925,10 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
             ? { time: ts(e.t), position: 'belowBar', color: up, shape: 'arrowUp', text: '站上' }
             : { time: ts(e.t), position: 'aboveBar', color: down, shape: 'arrowDown', text: '跌破' });
         });
+        // 週MACD 頂背離也標在日線上（敏感出場訊號）
+        r.divergences.forEach(function (x) {
+          marks.push({ time: ts(x.t), position: 'aboveBar', color: warn, shape: 'square', text: '頂背離' });
+        });
         var inE = false;
         r.day.forEach(function (d) {
           if (d && d.entry && !inE) marks.push({ time: ts(d.t), position: 'belowBar', color: css('--wline'), shape: 'circle', text: '開多' });
@@ -830,7 +936,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
         });
         marks.sort(function (a, b) { return a.time - b.time; });
         candles.setMarkers(marks);
-        legend.push('<span class="mk" style="color:var(--up)">▲ 站上</span>', '<span class="mk" style="color:var(--down)">▼ 跌破</span>', '<span class="mk" style="color:var(--wline)">● 開多條件成立</span>');
+        legend.push('<span class="mk" style="color:var(--up)">▲ 站上</span>', '<span class="mk" style="color:var(--down)">▼ 跌破</span>', '<span class="mk" style="color:var(--wline)">● 開多條件成立</span>', '<span class="mk" style="color:var(--warn)">■ 頂背離</span>');
       }
     } else {
       macdEl.hidden = false;
