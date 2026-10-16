@@ -218,7 +218,9 @@
       var z2 = accZoneAt(dd2.t);
       var nearAny = Math.abs(dd2.distD) <= p.nearPct || Math.abs(dd2.distW) <= p.nearPct;
       dd2.accZone = z2; dd2.accPull = !!z2 && nearAny;
-      if (dd2.accPull && !prevOn) accPulls.push({ t: dd2.t, i: i, price: dd2.c, rising: dd2.dRising && dd2.wRising });
+      // 同一段回踩只標一次：距上一個標記至少 14 天
+      var lastPull = accPulls[accPulls.length - 1];
+      if (dd2.accPull && !prevOn && (!lastPull || i - lastPull.i >= 14)) accPulls.push({ t: dd2.t, i: i, price: dd2.c, rising: dd2.dRising && dd2.wRising });
       prevOn = dd2.accPull;
     }
 

@@ -937,7 +937,15 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
             ctx.setLineDash([]);
             ctx.font = '11px "Noto Sans TC", system-ui, sans-serif'; ctx.textBaseline = 'bottom';
             ctx.fillStyle = col;
-            ctx.fillText(z.ongoing ? '吸籌區（進行中）' : '吸籌區', Math.max(x1 + 3, 3), y1 - 3);
+            // 文字放在方框右上角，避開左側的斐波那契標籤
+            var txt = z.ongoing ? '吸籌區（進行中）' : '吸籌區';
+            var tw = ctx.measureText(txt).width;
+            var tx = Math.min(x2, W - 4) - tw - 4;
+            if (tx < x1 + 3) tx = x1 + 3;
+            ctx.fillStyle = hexA(css('--surface'), 0.85);
+            ctx.fillRect(tx - 3, y1 - 16, tw + 6, 15);
+            ctx.fillStyle = col;
+            ctx.fillText(txt, tx, y1 - 3);
           });
         });
       }
