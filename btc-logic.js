@@ -27,8 +27,8 @@
     divMinGapWeeks: 8,    // 兩個高點至少相隔幾週
     fibWeeks: 156,        // 斐波那契取最近幾週的高低點
     confirmDays: 3,
-    accWeeks: 12,         // 吸籌區：看最近幾週
-    accRangePct: 30,      // 吸籌區：這段期間最高與最低相差幾 % 以內 = 橫盤
+    accWeeks: 8,          // 吸籌區：看最近幾週
+    accRangePct: 25,      // 吸籌區：這段期間最高與最低相差幾 % 以內 = 橫盤
     accDrawdownPct: 45,   // 吸籌區：價格距歷史高點至少跌了幾 % = 低位
     accMinDays: 14,       // 吸籌區：連續符合幾天才算
     accAfterDays: 56,     // 吸籌區結束（突破）後幾天內，回踩雙線仍算「吸籌區回踩」       // 歷史事件：站上/跌破後要連續停留幾天才算數
