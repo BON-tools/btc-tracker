@@ -26,7 +26,12 @@
     divLookbackWeeks: 104,// 往回找前一個波段高點的範圍（週）
     divMinGapWeeks: 8,    // 兩個高點至少相隔幾週
     fibWeeks: 156,        // 斐波那契取最近幾週的高低點
-    confirmDays: 3,       // 歷史事件：站上/跌破後要連續停留幾天才算數
+    confirmDays: 3,
+    accWeeks: 12,         // 吸籌區：看最近幾週
+    accRangePct: 30,      // 吸籌區：這段期間最高與最低相差幾 % 以內 = 橫盤
+    accDrawdownPct: 45,   // 吸籌區：價格距歷史高點至少跌了幾 % = 低位
+    accMinDays: 14,       // 吸籌區：連續符合幾天才算
+    accAfterDays: 56,     // 吸籌區結束（突破）後幾天內，回踩雙線仍算「吸籌區回踩」       // 歷史事件：站上/跌破後要連續停留幾天才算數
     divMemoryWeeks: 26,   // 頂背離出現後幾週內，開多訊號要加上警告
     similarExcludeDays: 180, // 歷史對照：排除最近幾天（才看得到後續漲跌）
     similarGapDays: 120   // 歷史對照：挑出的相似日期彼此至少相隔幾天
@@ -198,6 +203,25 @@
       };
     }
 
+    // 吸籌區 + 壓回雙線附近：吸籌區期間或結束後 accAfterDays 天內，價格回到任一條線 nearPct% 以內
+    var acc = accumulation(daily, weeks, wk.idxOfDay, p), accPulls = [], prevOn = false;
+    function accZoneAt(t) {
+      for (var q = acc.zones.length - 1; q >= 0; q--) {
+        var z = acc.zones[q];
+        if (t >= z.fromT && t <= z.toT + p.accAfterDays * DAY) return z;
+      }
+      return null;
+    }
+    for (i = 0; i < n; i++) {
+      var dd2 = day[i];
+      if (!dd2) { prevOn = false; continue; }
+      var z2 = accZoneAt(dd2.t);
+      var nearAny = Math.abs(dd2.distD) <= p.nearPct || Math.abs(dd2.distW) <= p.nearPct;
+      dd2.accZone = z2; dd2.accPull = !!z2 && nearAny;
+      if (dd2.accPull && !prevOn) accPulls.push({ t: dd2.t, i: i, price: dd2.c, rising: dd2.dRising && dd2.wRising });
+      prevOn = dd2.accPull;
+    }
+
     // 最近是否出現過頂背離（開多訊號要打折）
     var lastDiv = divergences.length ? divergences[divergences.length - 1] : null;
     var divRecent = divNow.active || (lastDiv != null && lastDiv.idx >= W - 1 - p.divMemoryWeeks);
@@ -212,6 +236,8 @@
       stop: stop,
       exit: last ? { divergence: divNow.active, belowBoth: last.belowBoth, belowAny: !last.aboveBoth } : null,
       fib: fibonacci(weeks, p.fibWeeks),
+      acc: acc,
+      accPullbacks: accPulls,
       events: crossEvents(day, closes, p.confirmDays),
       similar: similarDays(day, dMA, wMAd, closes, p)
     };
@@ -238,6 +264,48 @@
       return { ratio: r, price: up ? L + R * r : H - R * r, ext: true };
     });
     return { high: H, low: L, highT: weeks[hi].t, lowT: weeks[lo].t, up: up, levels: levels, ext: ext };
+  }
+
+  /* ---------- 低點橫盤吸籌區 ----------
+   * 條件：價格距歷史高點跌了 accDrawdownPct% 以上（低位），
+   *       且最近 accWeeks 週的最高/最低相差不到 accRangePct%（橫盤），連續 accMinDays 天。
+   * 歷史上常出現在主升段之前（2015、2016、2019、2023），但也有再破底的例子（2018/10、2022/9）。 */
+  function accumulation(daily, weeks, idxOfDay, p) {
+    var n = daily.length, ath = 0, flags = new Array(n).fill(null);
+    for (var i = 0; i < n; i++) {
+      if (daily[i].h > ath) ath = daily[i].h;
+      var wj = idxOfDay[i];
+      if (wj < p.accWeeks - 1) continue;
+      var hi = -Infinity, lo = Infinity;
+      for (var k = wj - p.accWeeks + 1; k <= wj; k++) { if (weeks[k].h > hi) hi = weeks[k].h; if (weeks[k].l < lo) lo = weeks[k].l; }
+      var range = (hi / lo - 1) * 100, dd = (1 - daily[i].c / ath) * 100;
+      if (range <= p.accRangePct && dd >= p.accDrawdownPct) flags[i] = { hi: hi, lo: lo, range: range, dd: dd, from: weeks[wj - p.accWeeks + 1].t };
+    }
+    var zones = [], start = -1;
+    for (i = 0; i <= n; i++) {
+      var f = i < n ? flags[i] : null;
+      if (f && start < 0) start = i;
+      if (!f && start >= 0) {
+        if (i - start >= p.accMinDays) {
+          var zhi = -Infinity, zlo = Infinity, from = flags[start].from;
+          for (var j = 0; j < n && daily[j].t <= daily[i - 1].t; j++) {
+            if (daily[j].t < from) continue;
+            if (daily[j].h > zhi) zhi = daily[j].h; if (daily[j].l < zlo) zlo = daily[j].l;
+          }
+          zones.push({ fromT: from, toT: daily[i - 1].t, hi: zhi, lo: zlo, ongoing: i === n, days: i - start });
+        }
+        start = -1;
+      }
+    }
+    var cur = flags[n - 1];
+    var curRun = 0;
+    for (i = n - 1; i >= 0 && flags[i]; i--) curRun++;
+    return {
+      zones: zones,
+      active: !!cur && curRun >= p.accMinDays,
+      forming: !!cur && curRun < p.accMinDays,
+      now: cur ? { hi: cur.hi, lo: cur.lo, range: cur.range, dd: cur.dd, fromT: cur.from, days: curRun } : null
+    };
   }
 
   /* ---------- 歷史：站上 / 跌破兩線事件 ---------- */
