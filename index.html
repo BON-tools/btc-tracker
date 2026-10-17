@@ -66,25 +66,6 @@ header.top { display: grid; gap: 10px; }
 .brand h1 { font-size: 18px; font-weight: 700; }
 .brand .lines { font-size: 12px; color: var(--muted); }
 .lines i { font-style: normal; display: inline-block; width: 10px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
-.coinbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.coin-search { position: relative; flex: 1 1 220px; max-width: 360px; min-width: 0; }
-.coin-search input {
-  width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
-  padding: 7px 10px 7px 32px; font-family: var(--font-num); text-transform: uppercase;
-}
-.coin-search input::placeholder { text-transform: none; font-family: var(--font-body); }
-.coin-search::before { content: "⌕"; position: absolute; left: 10px; top: 50%; transform: translateY(-52%); color: var(--muted); font-size: 16px; }
-.coin-list {
-  position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px); max-height: 280px; overflow-y: auto;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18);
-  margin: 0; padding: 4px; list-style: none;
-}
-.coin-list li { padding: 7px 10px; border-radius: 6px; cursor: pointer; font-family: var(--font-num); display: flex; justify-content: space-between; gap: 8px; }
-.coin-list li span { color: var(--muted); font-size: 12px; font-family: var(--font-body); }
-.coin-list li[aria-selected="true"], .coin-list li:hover { background: var(--sunk); }
-.quick { display: flex; gap: 6px; flex-wrap: wrap; }
-.quick button { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 3px 10px; font-size: 12px; font-family: var(--font-num); }
-.quick button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 .price-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .price { font-family: var(--font-num); font-size: clamp(30px, 8vw, 44px); font-weight: 600; letter-spacing: -.01em; }
 .chg { font-family: var(--font-num); font-size: 15px; font-weight: 500; }
@@ -246,16 +227,8 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <h1><span id="coin-name">BTC</span> 雙線監控</h1>
+      <h1>BTC 雙線監控</h1>
       <span class="lines"><i style="background:var(--accent)"></i>日MA360　<i style="background:var(--wline)"></i>週MA50</span>
-    </div>
-    <div class="coinbar">
-      <div class="coin-search">
-        <label for="coin-input" class="sr">搜尋幣種</label>
-        <input id="coin-input" type="text" autocomplete="off" spellcheck="false" placeholder="搜尋幣種，例如 ETH、SOL" role="combobox" aria-expanded="false" aria-controls="coin-list">
-        <ul class="coin-list" id="coin-list" role="listbox" hidden></ul>
-      </div>
-      <div class="quick" id="quick" aria-label="常用幣種"></div>
     </div>
     <div class="price-row">
       <span class="price" id="price">—</span>
@@ -327,8 +300,8 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
         <div class="field"><label for="lc-mmr">維持保證金率 %</label><input id="lc-mmr" type="number" inputmode="decimal" step="any"></div>
         <div class="field"><label for="lc-manual">交易所顯示的強平價（選填）</label><input id="lc-manual" type="number" inputmode="decimal" step="any" placeholder="填了就用這個"></div>
         <div class="field full subhead">加倉模擬（選填）</div>
-        <div class="field"><label for="lc-qty">目前倉位（<span class="coin-unit">BTC</span>）</label><input id="lc-qty" type="number" inputmode="decimal" step="any" placeholder="例如 0.5"></div>
-        <div class="field"><label for="lc-addqty">打算加倉（<span class="coin-unit">BTC</span>）</label><input id="lc-addqty" type="number" inputmode="decimal" step="any" placeholder="例如 0.2"></div>
+        <div class="field"><label for="lc-qty">目前倉位（BTC）</label><input id="lc-qty" type="number" inputmode="decimal" step="any" placeholder="例如 0.5"></div>
+        <div class="field"><label for="lc-addqty">打算加倉（BTC）</label><input id="lc-addqty" type="number" inputmode="decimal" step="any" placeholder="例如 0.2"></div>
         <div class="field full"><label for="lc-addprice">加倉價格（USD）</label><input id="lc-addprice" type="number" inputmode="decimal" step="any" placeholder="空白 = 用現價"></div>
       </form>
       <div class="out" id="liq-out"></div>
@@ -427,18 +400,14 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
     daily: null, source: '', mode: '', updated: null,
     res: null, chips: null, params: loadParams(),
     tab: 'd', fibSpan: 156, charts: [], liq: null,
-    manualFib: null, draw: false, drawP1: null,
-    coin: 'BTC', coins: L.POPULAR.slice(), dec: 0, loadId: 0
+    manualFib: loadManualFib(), draw: false, drawP1: null
   };
-  S.manualFib = loadManualFib();
 
   /* ---------- 小工具 ---------- */
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   function loadManualFib() {
-    try { var m = JSON.parse(store(fibKey()) || 'null'); return m && isFinite(m.p1) && isFinite(m.p2) ? m : null; } catch (e) { return null; }
+    try { var m = JSON.parse(store('btc-fib-manual') || 'null'); return m && isFinite(m.p1) && isFinite(m.p2) ? m : null; } catch (e) { return null; }
   }
-  // 手動斐波那契每個幣種分開記（BTC 沿用舊的名稱）
-  function fibKey() { return S.coin === 'BTC' ? 'btc-fib-manual' : 'fib-manual-' + S.coin; }
   function loadParams() {
     var p = {};
     try { p = JSON.parse(store('btc-params') || '{}') || {}; } catch (e) { p = {}; }
@@ -446,15 +415,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
   }
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function fDate(t) { var d = new Date(t); return d.getUTCFullYear() + '/' + pad(d.getUTCMonth() + 1) + '/' + pad(d.getUTCDate()); }
-  // 價格小數位數依幣價大小自動調整（BTC 不顯示小數，PEPE 這種小幣顯示到有效位數）
-  function decFor(p) {
-    if (!(p > 0)) return 2;
-    if (p >= 1000) return 0;
-    if (p >= 1) return 2;
-    return Math.min(10, Math.max(4, Math.ceil(-Math.log10(p)) + 3));
-  }
-  function fNum(v) { return Number(v).toLocaleString('en-US', { minimumFractionDigits: S.dec, maximumFractionDigits: S.dec }); }
-  function fUsd(v) { return v == null || !isFinite(v) ? '—' : '$' + fNum(v); }
+  function fUsd(v) { return v == null || !isFinite(v) ? '—' : '$' + Math.round(v).toLocaleString('en-US'); }
   function fPct(v, d) { if (v == null || !isFinite(v)) return '—'; d = d == null ? 1 : d; return (v > 0 ? '+' : '') + v.toFixed(d) + '%'; }
   function cls(v) { return v == null ? '' : v >= 0 ? 'pos' : 'neg'; }
   function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
@@ -486,22 +447,11 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
       ready();
       return;
     }
-    var id = ++S.loadId, coin = S.coin;
-    L.fetchDaily(null, coin).then(function (r) {
-      if (id !== S.loadId) return;
+    L.fetchDaily().then(function (r) {
       S.daily = r.daily; S.source = r.source; S.mode = 'live'; S.updated = new Date();
       ready();
       loadChips();
-    }).catch(function (err) {
-      if (window.console) console.error(err);
-      if (id !== S.loadId) return;
-      if (coin !== 'BTC') {
-        $('src').textContent = '';
-        showBanner('找不到 ' + coin + ' 的資料。請確認代號正確，而且 Binance 有 ' + coin + '/USDT 交易對。', true);
-        $('signal').setAttribute('data-s', 'wait'); $('sig-lamp').textContent = '?';
-        $('sig-t').textContent = '找不到 ' + coin; $('sig-d').textContent = '請換一個幣種，或點上方常用幣種。';
-        return;
-      }
+    }).catch(function () {
       fetch('data/snapshot.json', { cache: 'no-store' }).then(function (r) {
         if (!r.ok) throw new Error();
         return r.json();
@@ -519,10 +469,8 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
 
   function refreshLatest() {
     if (S.mode !== 'live') return;
-    var coin = S.coin;
-    var url = 'https://data-api.binance.vision/api/v3/klines?symbol=' + coin + 'USDT&interval=1d&limit=3';
+    var url = 'https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=3';
     fetch(url).then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (rows) {
-      if (coin !== S.coin || !S.daily) return;
       rows.forEach(function (r) {
         var c = { t: r[0], o: +r[1], h: +r[2], l: +r[3], c: +r[4] };
         var last = S.daily[S.daily.length - 1];
@@ -535,9 +483,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
   }
 
   function loadChips() {
-    var coin = S.coin;
-    L.fetchChips(null, coin).then(function (c) { if (coin === S.coin) { S.chips = c; renderChips(); } })
-      .catch(function () { if (coin === S.coin) { S.chips = null; renderChips(); } });
+    L.fetchChips().then(function (c) { S.chips = c; renderChips(); }).catch(function () { S.chips = null; renderChips(); });
   }
 
   function showBanner(text, isErr) {
@@ -551,8 +497,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
 
   function ready() {
     fillParamForm();
-    S.dec = decFor(S.daily[S.daily.length - 1].c); setPF();
-    if (!$('lc-entry').value) $('lc-entry').value = +S.daily[S.daily.length - 1].c.toFixed(S.dec);
+    if (!$('lc-entry').value) $('lc-entry').value = Math.round(S.daily[S.daily.length - 1].c);
     recompute();
     $('lc-mmr').value = S.res.params.mmrPct;
     renderText();
@@ -571,18 +516,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
     var when = S.mode === 'preview' ? '資料日期 ' + fDate(d[n - 1].t) : '更新於 ' + (S.updated || new Date()).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
     $('src').textContent = '來源：' + S.source + '　' + when;
 
-    if (!x) {
-      showBanner(S.coin + ' 目前只有 ' + n + ' 天的日K資料，至少要 360 天才算得出日MA360、50 週才算得出週MA50，所以無法判斷雙線訊號。圖上仍可看價格走勢。', true);
-      var el = $('signal'); el.setAttribute('data-s', 'wait');
-      $('sig-lamp').textContent = '–'; $('sig-t').textContent = '資料不足'; $('sig-d').textContent = '上市時間太短，雙線原則還不適用。';
-      $('sig-more').innerHTML = '';
-      document.title = '⚪ 資料不足｜' + S.coin + ' 雙線監控';
-      ['entry-checks', 'exit-checks', 'lines-table', 'liq-out', 'sim-table', 'ev-table', 'div-table'].forEach(function (k) { $(k).innerHTML = ''; });
-      Array.prototype.forEach.call($('verdicts').children, function (v) { v.className = 'verdict'; v.querySelector('.v').textContent = '—'; var dd = v.querySelector('.d'); if (dd) dd.textContent = ''; });
-      $('entry-count').textContent = ''; $('entry-note').textContent = '';
-      renderFib();
-      return;
-    }
+    if (!x) { showBanner('資料不足，無法計算日MA360（需要至少 360 天的資料）。', true); return; }
     var p = r.params;
     var dPrev = r.dMA[n - 1 - p.dSlopeDays], wPrev = r.wMAd[n - 1 - 7 * p.wSlopeWeeks];
     var dSlope = dPrev ? (x.dMA / dPrev - 1) * 100 : null, wSlope = wPrev ? (x.wMA / wPrev - 1) * 100 : null;
@@ -622,7 +556,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
       return '<li>' + icon(row[0] ? 'ok' : 'no') + '<div><div class="t">' + row[1] + '</div><div class="s">' + row[2] + '</div></div><div class="val">' + row[3] + '</div></li>';
     }).join('');
     $('entry-note').textContent = x.entry
-      ? (r.divRecent ? '條件都符合，但最近出現過頂背離。' + (S.coin === 'BTC' ? '歷史上 2021/12、2025/10 的開多訊號都出現在背離之後的高檔，' : '背離之後的開多訊號常出現在高檔，') + '進場前請再三確認。' : '條件全部符合。止損參考：' + fUsd(r.stop) + '。')
+      ? (r.divRecent ? '條件都符合，但最近出現過頂背離。歷史上 2021/12、2025/10 的開多訊號都出現在背離之後的高檔，進場前請再三確認。' : '條件全部符合。止損參考：' + fUsd(r.stop) + '。')
       : '還沒全部符合前，依原則不開多單。';
 
     // 出場訊號
@@ -693,12 +627,12 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
     } else if (x.accPull) {
       st = 'care'; icon = '!'; title = '吸籌區回踩雙線・小心評估';
       desc = '出現低點橫盤吸籌區（' + fUsd(x.accZone.lo) + '～' + fUsd(x.accZone.hi) + '），價格壓回雙線附近，但兩線還沒正式上揚（' +
-        (x.dRising ? '' : '日MA360 下彎 ') + (x.wRising ? '' : '週MA50 下彎') + '）。' + (S.coin === 'BTC' ? '歷史上 2019/4 這樣進場大漲，2015/7 則先再跌約 20%；' : '這種位置可能起漲也可能再探底；') + '要開也只用小倉位，或等兩線上揚。';
+        (x.dRising ? '' : '日MA360 下彎 ') + (x.wRising ? '' : '週MA50 下彎') + '）。歷史上 2019/4 這樣進場大漲，2015/7 則先再跌約 20%；要開也只用小倉位，或等兩線上揚。';
     } else if (r.acc.active) {
       var a = r.acc.now;
       st = 'acc'; icon = '≈'; title = '可能是吸籌區・小心評估';
       desc = '近 ' + p.accWeeks + ' 週價格在 ' + fUsd(a.lo) + '～' + fUsd(a.hi) + ' 之間橫盤（區間 ' + a.range.toFixed(0) + '%），距歷史高點 −' + a.dd.toFixed(0) + '%。' +
-        '這常是主升段前的吸籌，但也可能再破底' + (S.coin === 'BTC' ? '（2018/10、2022/9 都是這樣）' : '') + '。突破上緣 ' + fUsd(a.hi) + ' 並站穩兩線再考慮；跌破下緣 ' + fUsd(a.lo) + ' 要小心。' +
+        '這常是主升段前的吸籌，但也可能再破底（2018/10、2022/9 都是這樣）。突破上緣 ' + fUsd(a.hi) + ' 並站穩兩線再考慮；跌破下緣 ' + fUsd(a.lo) + ' 要小心。' +
         (x.entry ? '' : '開多條件還差：' + failedNames(c, p).join('、') + '。');
     } else if (x.aboveBoth) {
       st = r.divRecent ? 'care' : 'hold'; icon = r.divRecent ? '!' : '◆';
@@ -726,7 +660,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
     $('sig-d').textContent = desc;
     $('sig-more').innerHTML = rows.join('');
     var dot = { go: '🟢', care: '🟡', warn: '🟠', exit: '🔴', hold: '🔵', wait: '⚪', acc: '🟣' }[st];
-    document.title = dot + ' ' + title + '｜' + S.coin + ' 雙線監控';
+    document.title = dot + ' ' + title + '｜BTC 雙線監控';
   }
 
   function failedNames(c, p) {
@@ -900,7 +834,6 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
     };
   }
   var PF = { type: 'price', precision: 0, minMove: 1 };
-  function setPF() { PF = { type: 'price', precision: S.dec, minMove: Math.pow(10, -S.dec) }; }
   function ts(t) { return Math.floor(t / 1000); }
   function lineData(times, vals) { return times.map(function (t, i) { return vals[i] == null ? { time: t } : { time: t, value: vals[i] }; }); }
 
@@ -966,7 +899,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
           lv.forEach(function (l, i) {
             var y = ys[i];
             if (y == null) return;
-            var txt = l.ratio + '  ' + fNum(l.price);
+            var txt = l.ratio + '  ' + Math.round(l.price).toLocaleString('en-US');
             var tw = ctx.measureText(txt).width;
             ctx.fillStyle = hexA(css('--surface'), 0.94);
             ctx.fillRect(x0 + 4, y - 16, tw + 22, 15);
@@ -1081,7 +1014,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
       }
       var mc = LightweightCharts.createChart(macdEl, Object.assign(baseOpts(), { timeScale: { borderColor: css('--line'), visible: true } }));
       S.charts.push(mc);
-      var md = Math.min(10, S.dec + 1), MPF = { type: 'price', precision: md, minMove: Math.pow(10, -md) };
+      var MPF = { type: 'price', precision: 0, minMove: 1 };
       mc.addHistogramSeries({ priceFormat: MPF, priceLineVisible: false, lastValueVisible: false }).setData(wt.map(function (t, i) {
         var h = r.macd.hist[i];
         return h == null ? { time: t } : { time: t, value: h, color: h >= 0 ? 'rgba(127,140,160,.45)' : 'rgba(127,140,160,.25)' };
@@ -1123,7 +1056,7 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
       else {
         S.manualFib = { t1: S.drawP1.t, p1: S.drawP1.p, t2: t, p2: price };
         S.drawP1 = null; S.draw = false;
-        store(fibKey(), JSON.stringify(S.manualFib));
+        store('btc-fib-manual', JSON.stringify(S.manualFib));
         renderFib();
       }
       updateDrawUI();
@@ -1169,14 +1102,14 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
     updateDrawUI(); if (S.res) renderCharts(true);
   });
   $('btn-fib-auto').addEventListener('click', function () {
-    S.manualFib = null; store(fibKey(), 'null');
+    S.manualFib = null; store('btc-fib-manual', 'null');
     updateDrawUI(); if (S.res) { renderFib(); renderCharts(true); }
   });
   ['tg-fib', 'tg-risk', 'tg-mark'].forEach(function (id) { $(id).addEventListener('change', function () { renderCharts(true); }); });
   $('liq-form').addEventListener('input', function () { if (!S.res) return; renderLiq(); renderCharts(true); });
   $('liq-form').addEventListener('submit', function (e) { e.preventDefault(); });
   $('param-form').addEventListener('submit', function (e) { e.preventDefault(); });
-  $('fib-span').addEventListener('change', function () { S.fibSpan = +this.value; S.manualFib = null; store(fibKey(), 'null'); updateDrawUI(); if (!S.res) return; recompute(); renderFib(); renderCharts(true); });
+  $('fib-span').addEventListener('change', function () { S.fibSpan = +this.value; S.manualFib = null; store('btc-fib-manual', 'null'); updateDrawUI(); if (!S.res) return; recompute(); renderFib(); renderCharts(true); });
   $('p-apply').addEventListener('click', function () {
     var p = {};
     PARAM_KEYS.forEach(function (k) { var v = parseFloat($('p-' + k).value); if (isFinite(v)) p[k] = v; });
@@ -1200,71 +1133,6 @@ footer { font-size: 12px; color: var(--muted); text-align: center; }
 
   var savedTab = store('btc-tab');
   if (savedTab === 'w') { S.tab = 'w'; $('tab-d').setAttribute('aria-pressed', 'false'); $('tab-w').setAttribute('aria-pressed', 'true'); }
-
-  /* ---------- 幣種搜尋與切換 ---------- */
-  var QUICK = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE'];
-  function renderQuick() {
-    $('quick').innerHTML = QUICK.map(function (c) {
-      return '<button type="button" data-coin="' + c + '" aria-pressed="' + (c === S.coin) + '">' + c + '</button>';
-    }).join('');
-  }
-  function setCoin(coin) {
-    coin = String(coin || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/USDT$/, '');
-    if (!coin) return;
-    closeList(); $('coin-input').value = ''; $('coin-input').blur();
-    if (coin === S.coin && S.daily) return;
-    S.coin = coin;
-    S.daily = null; S.res = null; S.chips = null; S.liq = null; S.mode = '';
-    S.draw = false; S.drawP1 = null; S.manualFib = loadManualFib();
-    $('coin-name').textContent = coin;
-    Array.prototype.forEach.call(document.querySelectorAll('.coin-unit'), function (e) { e.textContent = coin; });
-    $('lc-entry').value = ''; $('lc-manual').value = ''; $('lc-qty').value = ''; $('lc-addqty').value = ''; $('lc-addprice').value = '';
-    $('banner').hidden = true; $('price').textContent = '—'; $('chg').textContent = '';
-    $('sig-t').textContent = '載入中'; $('sig-d').textContent = ''; $('sig-more').innerHTML = '';
-    document.title = coin + ' 雙線監控';
-    clearCharts(); updateDrawUI(); renderQuick();
-    load();
-  }
-  var listIdx = -1, listItems = [];
-  function closeList() { $('coin-list').hidden = true; $('coin-input').setAttribute('aria-expanded', 'false'); listIdx = -1; }
-  function showList() {
-    var q = $('coin-input').value.trim().toUpperCase().replace(/USDT$/, '');
-    var all = S.coins;
-    // 排序：完全相同 → 開頭相同 → 包含；都沒有時才把打的字當成代號
-    listItems = (q ? all.filter(function (c) { return c === q; })
-      .concat(all.filter(function (c) { return c !== q && c.indexOf(q) === 0; }))
-      .concat(all.filter(function (c) { return c.indexOf(q) > 0; })) : all).slice(0, 40);
-    if (q && !listItems.length) listItems = [q];
-    var ul = $('coin-list');
-    ul.innerHTML = listItems.length ? listItems.map(function (c, i) {
-      return '<li role="option" id="coin-opt-' + i + '" data-coin="' + c + '" aria-selected="' + (i === listIdx) + '">' + c + '<span>' + (c === S.coin ? '目前' : c + '/USDT') + '</span></li>';
-    }).join('') : '<li aria-disabled="true"><span>沒有符合的幣種</span></li>';
-    ul.hidden = false; $('coin-input').setAttribute('aria-expanded', 'true');
-  }
-  $('coin-input').addEventListener('focus', function () { listIdx = -1; showList(); });
-  $('coin-input').addEventListener('input', function () { listIdx = -1; showList(); });
-  $('coin-input').addEventListener('keydown', function (e) {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (!listItems.length) return;
-      listIdx = (listIdx + (e.key === 'ArrowDown' ? 1 : -1) + listItems.length) % listItems.length;
-      showList();
-      var el = $('coin-opt-' + listIdx); if (el) el.scrollIntoView({ block: 'nearest' });
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      setCoin(listIdx >= 0 ? listItems[listIdx] : this.value);
-    } else if (e.key === 'Escape') { closeList(); this.blur(); }
-  });
-  $('coin-list').addEventListener('mousedown', function (e) {
-    var li = e.target.closest('li[data-coin]');
-    if (li) { e.preventDefault(); setCoin(li.getAttribute('data-coin')); }
-  });
-  $('coin-input').addEventListener('blur', function () { setTimeout(closeList, 120); });
-  $('quick').addEventListener('click', function (e) {
-    var b = e.target.closest('button[data-coin]'); if (b) setCoin(b.getAttribute('data-coin'));
-  });
-  if (!window.BTC_PREVIEW) L.fetchSymbols().then(function (list) { if (list && list.length) S.coins = list; });
-  renderQuick();
 
   updateDrawUI();
   load();
