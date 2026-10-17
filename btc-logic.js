@@ -393,10 +393,10 @@
     });
   }
 
-  function fetchBinanceDaily(base, fetchImpl) {
-    var out = [], start = Date.UTC(2017, 7, 17);
+  function fetchBinanceDaily(base, fetchImpl, coin) {
+    var out = [], start = Date.UTC(2017, 7, 17), sym = (coin || 'BTC') + 'USDT';
     function page(k) {
-      var url = base + '/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=1000&startTime=' + start;
+      var url = base + '/api/v3/klines?symbol=' + sym + '&interval=1d&limit=1000&startTime=' + start;
       return getJson(url, fetchImpl).then(function (rows) {
         rows.forEach(function (r) { out.push({ t: r[0], o: +r[1], h: +r[2], l: +r[3], c: +r[4], v: +r[5] }); });
         if (rows.length < 1000 || k >= 12) return out;
@@ -407,11 +407,11 @@
     return page(0);
   }
 
-  function fetchCoinbaseDaily(fetchImpl) {
+  function fetchCoinbaseDaily(fetchImpl, coin) {
     var end = Math.floor(Date.now() / DAY) * DAY + DAY, out = [], seen = {};
     function page(k) {
       var e = end - k * 300 * DAY, s = e - 300 * DAY;
-      var url = 'https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=86400&start=' +
+      var url = 'https://api.exchange.coinbase.com/products/' + (coin || 'BTC') + '-USD/candles?granularity=86400&start=' +
         new Date(s).toISOString() + '&end=' + new Date(e).toISOString();
       return getJson(url, fetchImpl).then(function (rows) {
         rows.forEach(function (r) {
@@ -426,18 +426,20 @@
   }
 
   // 依序嘗試資料來源，第一個成功的就用
-  function fetchDaily(fetchImpl) {
+  // coin：幣種代號（預設 BTC），抓的是該幣對 USDT（Coinbase 為對 USD）的日K
+  function fetchDaily(fetchImpl, coin) {
     fetchImpl = fetchImpl || root.fetch.bind(root);
+    coin = (coin || 'BTC').toUpperCase();
     var sources = [
-      { name: 'Binance', run: function () { return fetchBinanceDaily('https://data-api.binance.vision', fetchImpl); } },
-      { name: 'Binance', run: function () { return fetchBinanceDaily('https://api.binance.com', fetchImpl); } },
-      { name: 'Coinbase', run: function () { return fetchCoinbaseDaily(fetchImpl); } }
+      { name: 'Binance', run: function () { return fetchBinanceDaily('https://data-api.binance.vision', fetchImpl, coin); } },
+      { name: 'Binance', run: function () { return fetchBinanceDaily('https://api.binance.com', fetchImpl, coin); } },
+      { name: 'Coinbase', run: function () { return fetchCoinbaseDaily(fetchImpl, coin); } }
     ];
     var errors = [];
     function tryAt(k) {
       if (k >= sources.length) return Promise.reject(new Error('所有資料來源都失敗：' + errors.join('；')));
       return sources[k].run().then(function (daily) {
-        if (daily.length < 800) throw new Error(sources[k].name + ' 資料太少');
+        if (daily.length < 10) throw new Error(sources[k].name + ' 資料太少');
         return { source: sources[k].name, daily: daily };
       }).catch(function (e) { errors.push(e.message); return tryAt(k + 1); });
     }
@@ -445,16 +447,17 @@
   }
 
   // 籌碼參考（Binance 合約公開資料；抓不到就回傳 null）
-  function fetchChips(fetchImpl) {
+  function fetchChips(fetchImpl, coin) {
     fetchImpl = fetchImpl || root.fetch.bind(root);
+    var SYM = (coin || 'BTC').toUpperCase() + 'USDT';
     var B = 'https://fapi.binance.com';
     function safe(pr) { return pr.catch(function () { return null; }); }
     return Promise.all([
-      safe(getJson(B + '/fapi/v1/premiumIndex?symbol=BTCUSDT', fetchImpl)),
-      safe(getJson(B + '/fapi/v1/fundingRate?symbol=BTCUSDT&limit=90', fetchImpl)),
-      safe(getJson(B + '/futures/data/openInterestHist?symbol=BTCUSDT&period=1d&limit=30', fetchImpl)),
-      safe(getJson(B + '/futures/data/globalLongShortAccountRatio?symbol=BTCUSDT&period=1d&limit=30', fetchImpl)),
-      safe(getJson(B + '/futures/data/topLongShortPositionRatio?symbol=BTCUSDT&period=1d&limit=30', fetchImpl))
+      safe(getJson(B + '/fapi/v1/premiumIndex?symbol=' + SYM + '', fetchImpl)),
+      safe(getJson(B + '/fapi/v1/fundingRate?symbol=' + SYM + '&limit=90', fetchImpl)),
+      safe(getJson(B + '/futures/data/openInterestHist?symbol=' + SYM + '&period=1d&limit=30', fetchImpl)),
+      safe(getJson(B + '/futures/data/globalLongShortAccountRatio?symbol=' + SYM + '&period=1d&limit=30', fetchImpl)),
+      safe(getJson(B + '/futures/data/topLongShortPositionRatio?symbol=' + SYM + '&period=1d&limit=30', fetchImpl))
     ]).then(function (r) {
       var out = { funding: null, funding30: null, oi: null, oiChange30: null, ls: null, lsTop: null };
       if (r[0]) out.funding = +r[0].lastFundingRate * 100;
@@ -475,12 +478,31 @@
     });
   }
 
+  // 可搜尋的幣種清單：Binance 現貨所有對 USDT 的交易對（排除槓桿代幣）
+  var POPULAR = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'TRX', 'AVAX', 'LINK', 'TON', 'SUI', 'DOT', 'LTC', 'BCH', 'NEAR', 'APT', 'UNI', 'PEPE', 'SHIB'];
+  function fetchSymbols(fetchImpl) {
+    fetchImpl = fetchImpl || root.fetch.bind(root);
+    return getJson('https://data-api.binance.vision/api/v3/ticker/price', fetchImpl).then(function (rows) {
+      var set = {};
+      rows.forEach(function (r) {
+        var s2 = r.symbol;
+        if (!/USDT$/.test(s2) || !(+r.price > 0)) return;
+        var b = s2.slice(0, -4);
+        if (!b || /(UP|DOWN|BULL|BEAR)$/.test(b) || /^(USDC|FDUSD|TUSD|BUSD|DAI|USDP|EUR|AEUR|EURI|USD1)$/.test(b)) return;
+        set[b] = 1;
+      });
+      var list = Object.keys(set).sort();
+      var pop = POPULAR.filter(function (c) { return set[c]; });
+      return pop.concat(list.filter(function (c) { return pop.indexOf(c) < 0; }));
+    }).catch(function () { return POPULAR.slice(); });
+  }
+
   var api = {
     DEFAULTS: DEFAULTS, DAY: DAY,
     sma: sma, ema: ema, macd: macd, toWeekly: toWeekly, weekStart: weekStart,
     analyze: analyze, fibonacci: fibonacci,
     liqLong: liqLong, maxLeverage: maxLeverage,
-    fetchDaily: fetchDaily, fetchChips: fetchChips
+    fetchDaily: fetchDaily, fetchChips: fetchChips, fetchSymbols: fetchSymbols, POPULAR: POPULAR
   };
 
   root.BTCLogic = api;
